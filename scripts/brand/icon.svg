@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4FC3F7"/><stop offset="1" stop-color="#0277BD"/></linearGradient>
+    <linearGradient id="gdr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#01579B"/><stop offset="1" stop-color="#0288D1"/></linearGradient>
+  </defs>
+  <!-- Home Keeper tuct/levoit brand icon. Drawn from scratch for this project (no template or
+       third-party artwork): a tower air purifier with clean air rising from its outlet and a
+       darker inset panel holding three filter levels like the IPP and Valetudo icons, one of
+       them low. See scripts/brand/README.md. -->
+  <g fill="none" stroke="#4FC3F7" stroke-width="9" stroke-linecap="round"><path d="M92 46 q8 -8 0 -16 q-8 -8 0 -16"/><path d="M128 46 q8 -8 0 -16 q-8 -8 0 -16"/><path d="M164 46 q8 -8 0 -16 q-8 -8 0 -16"/></g><rect x="48" y="60" width="160" height="184" rx="34" fill="url(#g)"/><rect x="80" y="76" width="96" height="10" rx="5" fill="#ffffff" fill-opacity="0.55"/><rect x="66" y="100" width="124" height="128" rx="20" fill="url(#gdr)"/><rect x="78" y="112" width="26" height="104" rx="9" fill="#ffffff" fill-opacity="0.35"/><rect x="78" y="133" width="26" height="83" rx="9" fill="#ffffff"/><rect x="116" y="112" width="26" height="104" rx="9" fill="#ffffff" fill-opacity="0.35"/><rect x="116" y="122" width="26" height="94" rx="9" fill="#ffffff"/><rect x="154" y="112" width="26" height="104" rx="9" fill="#ffffff" fill-opacity="0.35"/><rect x="154" y="196" width="26" height="20" rx="9" fill="#ffffff"/>
+</svg>
