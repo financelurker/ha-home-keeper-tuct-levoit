@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from custom_components.home_keeper_tuct_levoit import logic
 from custom_components.home_keeper_tuct_levoit.catalog import model_for, model_key
-from custom_components.home_keeper_tuct_levoit.const import SOURCE_NS
+from custom_components.home_keeper_tuct_levoit.const import DOMAIN, SOURCE_NS
 
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
 S = logic.Settings(config_entry_id="e1", lang="en")
@@ -216,7 +216,12 @@ def test_reconcile_does_not_press_twice_in_one_run() -> None:
 
 
 def _spares(*parts: dict) -> dict:
-    return {"id": "a-sp", "parts": list(parts), "source": {SOURCE_NS: {"role": "spares"}}}
+    return {
+        "id": "a-sp",
+        "parts": list(parts),
+        "managed_by": {"integration": DOMAIN},
+        "source": {SOURCE_NS: {"role": "spares"}},
+    }
 
 
 def test_one_shared_spares_appliance_with_one_part_per_filter_type() -> None:
@@ -262,24 +267,35 @@ def test_links_keep_the_users_other_parts() -> None:
     assert link.parts == [other, {"asset_id": "a-sp", "part_id": "p1", "quantity": 1}]
 
 
-def test_stock_and_appliances_off_delete_what_we_made() -> None:
+def test_stock_and_appliances_off_retire_what_we_made() -> None:
     part = {"id": "p1", "name": "Vital 100S-RF", "type": "consumable", "notes": "Used by: Office"}
     task = _task("filter", armed=True)
     task["source"]["parts"] = [{"asset_id": "a-sp", "part_id": "p1", "quantity": 1}]
     mine = {
         "id": "a-pur",
         "device_id": "d1",
-        "managed_by": {"integration": "x"},
+        "managed_by": {"integration": DOMAIN},
         "source": {SOURCE_NS: {"device_id": "d1", "role": "purifier"}},
     }
     off = logic.Settings(config_entry_id="e1", stock_enabled=False, appliances_enabled=False)
     acts = logic.plan_assets([_spares(part), mine], [task], [_p()], {"d1"}, off)
-    # Unlinked first, then deleted: options switched off clean up after themselves.
+    # Unlinked first, then retired: nothing counted → deleted.
     assert acts == [
         logic.LinkParts("t-filter", []),
         logic.DeleteAsset("a-pur"),
         logic.DeleteAsset("a-sp"),
     ]
+    # Counted stock → handed over to the user instead (Home Keeper's uninstall rule).
+    counted = _spares({**part, "stock": 2})
+    acts = logic.plan_assets([counted, mine], [task], [_p()], {"d1"}, off)
+    assert acts[-1] == logic.ReleaseAsset("a-sp")
+
+
+def test_handed_over_appliances_are_no_longer_ours() -> None:
+    released = {**_spares(), "managed_by": None}
+    assert logic.our_assets([released]) == []
+    acts = logic.plan_assets([released], [], [_p()], {"d1"}, S)
+    assert any(isinstance(a, logic.EnsureAsset) and a.payload["kind"] == "virtual" for a in acts)
 
 
 def test_existing_appliance_on_the_device_page_is_respected_and_gone_devices_cleaned() -> None:
@@ -291,6 +307,7 @@ def test_existing_appliance_on_the_device_page_is_respected_and_gone_devices_cle
     gone = {
         "id": "a-gone",
         "device_id": "d9",
+        "managed_by": {"integration": DOMAIN},
         "source": {SOURCE_NS: {"device_id": "d9", "role": "purifier"}},
     }
     assert logic.DeleteAsset("a-gone") in logic.plan_assets([gone], [], [], set(), S)
