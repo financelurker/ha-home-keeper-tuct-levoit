@@ -404,3 +404,25 @@ def test_users_own_appliance_gets_no_part_and_no_link() -> None:
         if isinstance(a, logic.LinkParts)
         for link in a.parts
     )
+
+
+# ── renaming spare filters ───────────────────────────────────────────────────
+
+
+def test_spare_renames() -> None:
+    before = {"d1": "A", "d2": "A", "d3": "C"}
+    # Every purifier of A moves to B: rename, stock and history stay.
+    assert logic.plan_spare_renames(before, {"d1": "B", "d2": "B", "d3": "C"}) == {"A": "B"}
+    # One moves to a filter of its own: a new part, the others keep A.
+    assert logic.plan_spare_renames(before, {"d1": "A-PA", "d2": "A", "d3": "C"}) == {}
+    # A splits two ways: no rename, two new parts.
+    assert logic.plan_spare_renames(before, {"d1": "B", "d2": "B2", "d3": "C"}) == {}
+    # A merges into an existing name: no rename (that part exists already).
+    assert logic.plan_spare_renames(before, {"d1": "C", "d2": "C", "d3": "C"}) == {}
+
+
+def test_filter_name_from_the_options_wins() -> None:
+    p = _p(filter="Vital 100S-RF-PA")
+    assert p.filter_part == "Vital 100S-RF-PA"
+    (create,) = logic.plan_filter(None, _p(filter="X", filter_low=True), S)
+    assert "**X**" in create.payload["notes"]

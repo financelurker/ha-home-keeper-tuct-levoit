@@ -70,13 +70,20 @@ ENTITY_KEYS: dict[str, tuple[str, tuple[str, ...]]] = {
     "runtime": ("sensor", ("fan_runtime",)),
 }
 
-# ── Options (the options flow follows; the defaults apply until then) ─────────
+# ── Options ──────────────────────────────────────────────────────────────────
 OPT_STOCK_ENABLED = "stock_enabled"
 OPT_APPLIANCES_ENABLED = "appliances_enabled"
 OPT_RESET_ON_DONE = "reset_on_done"
 OPT_PREFILTER_ENABLED = "prefilter_enabled"
 OPT_PREFILTER_HOURS = "prefilter_hours"
 OPT_PREFILTER_WEEKS = "prefilter_weeks"
+# {model key: filter name}: the filter every purifier of that model takes.
+OPT_FILTER_NAMES = "filter_names"
+# {device id: filter name}: a purifier that takes a filter of its own.
+OPT_DEVICE_FILTERS = "device_filters"
+# {device id: {"filter_low" | "filter_reset" | "runtime": entity id}}: entities assigned
+# by hand; a key left out is detected automatically.
+OPT_ENTITIES = "entities"
 
 DEFAULT_STOCK_ENABLED = True
 DEFAULT_APPLIANCES_ENABLED = True
@@ -144,6 +151,16 @@ TEXT: dict[str, dict[str, str]] = {
             "Levoit air purifiers on tuct/levoit ESPHome firmware: filter replacement "
             "from Filter Low, pre-filter cleaning, one shared spare-filter stock."
         ),
+        # Options flow labels built at run time (models and purifiers vary).
+        "weeks_unit": "weeks",
+        "model_field": "{model} · {count} devices",
+        "device_option": "{name} · {model} · {found} of {total} entities, {how}",
+        "automatic": "automatic",
+        "by_hand": "some assigned by hand",
+        "not_found": "not found",
+        "entity_filter_low": "Filter Low",
+        "entity_filter_reset": "Filter reset button",
+        "entity_runtime": "Fan runtime",
     },
     "de": {
         "filter_name": "Filter tauschen ({device})",
@@ -185,5 +202,14 @@ TEXT: dict[str, dict[str, str]] = {
             "Levoit-Luftreiniger mit tuct/levoit-ESPHome-Firmware: Filtertausch aus "
             "Filter Low, Vorfilterreinigung, ein gemeinsamer Ersatzfilter-Vorrat."
         ),
+        "weeks_unit": "Wochen",
+        "model_field": "{model} · {count} Geräte",
+        "device_option": "{name} · {model} · {found} von {total} Entitäten, {how}",
+        "automatic": "automatisch",
+        "by_hand": "teils von Hand zugeordnet",
+        "not_found": "nicht gefunden",
+        "entity_filter_low": "Filter Low",
+        "entity_filter_reset": "Filter-Reset-Taste",
+        "entity_runtime": "Lüfterlaufzeit",
     },
 }

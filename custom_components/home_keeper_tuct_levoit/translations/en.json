@@ -9,5 +9,84 @@
     "abort": {
       "single_instance_allowed": "Already set up. One entry covers every purifier."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "tuct/levoit air purifiers",
+        "description": "{count} air purifiers found. What would you like to configure?",
+        "menu_options": {
+          "general": "General",
+          "filters": "Spare filters",
+          "devices": "Devices and entities"
+        },
+        "menu_option_descriptions": {
+          "general": "Spare-filter stock, appliances, reset on done, pre-filter interval",
+          "filters": "Filter name per model or per device, e.g. a Pet Allergy variant",
+          "devices": "Check the detected entities or assign them by hand"
+        }
+      },
+      "general": {
+        "title": "General",
+        "data": {
+          "stock_enabled": "Shared spare-filter stock",
+          "appliances_enabled": "Appliances on the purifiers",
+          "reset_on_done": "Reset filter statistics on done",
+          "prefilter_enabled": "“Clean pre-filter” task",
+          "prefilter_hours": "Clean pre-filter every … fan hours",
+          "prefilter_weeks": "Or at the latest every … weeks"
+        },
+        "data_description": {
+          "stock_enabled": "One appliance “Levoit spare filters” with one part per filter type. Every filter replacement takes one off the stock. Off: deleted, or handed over to you if you counted stock on it.",
+          "appliances_enabled": "Model, notes and the fitted filter on the device page, only where no appliance exists yet. Off: deleted, or handed over to you if you counted stock on them.",
+          "reset_on_done": "When you tick off “Replace filter” in Home Keeper, the integration presses “Filter Reset” on the purifier.",
+          "prefilter_enabled": "For every purifier. Off: the pre-filter tasks are deleted.",
+          "prefilter_hours": "Needs a “Fan Runtime” sensor. Without one, only the weeks count.",
+          "prefilter_weeks": "Levoit recommends every 2–4 weeks. Whichever comes first is due."
+        }
+      },
+      "filters": {
+        "title": "Spare filters",
+        "description": "The names are the parts in the shared stock “Levoit spare filters” and on the device pages. Renaming keeps the stock and the history. Leave a field empty for the default.\n\nDefaults:\n{defaults}",
+        "sections": {
+          "models": {
+            "name": "Default per model",
+            "description": "The filter every purifier of this model takes."
+          },
+          "devices": {
+            "name": "Per device (optional)",
+            "description": "A purifier that takes another filter, e.g. a Pet Allergy variant, gets its own part with its own stock."
+          }
+        }
+      },
+      "devices": {
+        "title": "Devices and entities",
+        "description": "Which air purifier do you want to check?",
+        "data": {
+          "device": "Air purifier"
+        }
+      },
+      "device": {
+        "title": "{name}",
+        "description": "{model}. Leave a field empty to detect it automatically: by its name in the ESPHome YAML first, else by its entity ID.\n\nDetected automatically:\n{detected}",
+        "data": {
+          "filter_low": "Filter Low (required)",
+          "filter_reset": "Filter reset button",
+          "runtime": "Fan runtime (optional)"
+        },
+        "data_description": {
+          "filter_low": "Raises “Replace filter”.",
+          "filter_reset": "Pressed when you tick off “Replace filter”.",
+          "runtime": "Without this sensor the pre-filter is due by weeks only."
+        }
+      }
+    },
+    "error": {
+      "filter_low_missing": "No Filter Low sensor was detected for this purifier. Choose one."
+    },
+    "abort": {
+      "not_loaded": "The integration is not loaded. Reload it and try again.",
+      "no_purifiers": "No air purifier found. Check the ESPHome project name tuct.levoit-…, e.g. tuct.levoit-vital100s."
+    }
   }
 }
