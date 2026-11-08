@@ -74,12 +74,14 @@
         "data": {
           "filter_low": "Filter Low (Pflicht)",
           "filter_reset": "Filter-Reset-Taste",
-          "runtime": "Lüfterlaufzeit (optional)"
+          "runtime": "Lüfterlaufzeit (optional)",
+          "filter_life": "Filter-Restlaufzeit (optional)"
         },
         "data_description": {
           "filter_low": "Löst „Filter tauschen“ aus.",
           "filter_reset": "Wird beim Abhaken von „Filter tauschen“ gedrückt.",
-          "runtime": "Ohne diesen Sensor ist der Vorfilter nur nach Wochen fällig."
+          "runtime": "Ohne diesen Sensor ist der Vorfilter nur nach Wochen fällig.",
+          "filter_life": "„Filter %“ von tuct, wird am Filter-Task in 5-%-Schritten angezeigt."
         }
       }
     },

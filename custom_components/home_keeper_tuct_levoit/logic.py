@@ -63,6 +63,8 @@ class Purifier:
     filter_low_entity: str | None = None
     # True / False from the binary sensor, None while unknown or unavailable.
     filter_low: bool | None = None
+    filter_life_entity: str | None = None
+    filter_life: float | None = None
     reset_entity: str | None = None
     runtime_entity: str | None = None
     # Device disabled: its tasks are switched off, not deleted.
@@ -97,9 +99,14 @@ class Settings:
 
 @dataclass(frozen=True, slots=True)
 class CreateTask:
-    """``add_task``."""
+    """``add_task``; with *dormant*, followed by ``skip_task`` to disarm it.
+
+    Home Keeper creates a triggered task armed. A skip makes it dormant without a
+    completion, so no stock is drawn and no part is stamped.
+    """
 
     payload: dict[str, Any]
+    dormant: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -365,11 +372,33 @@ def resets_on_done(purifier: Purifier, settings: Settings) -> bool:
 
 def filter_notes(purifier: Purifier, settings: Settings) -> str:
     key = "filter_notes" if resets_on_done(purifier, settings) else "filter_notes_manual"
-    return _t(settings, key, part=purifier.filter_part)
+    notes = _t(settings, key, part=purifier.filter_part)
+    if purifier.filter_life_entity:
+        notes += "\n\n" + _t(settings, "filter_life_hint")
+    return notes
+
+
+def filter_life_step(life: float | None) -> int | None:
+    """Return the filter life left in 5 % steps, rounded down, or None if unknown."""
+    if life is None:
+        return None
+    return int(max(0.0, min(100.0, life)) // 5 * 5)
+
+
+def filter_chips(purifier: Purifier, settings: Settings) -> list[dict[str, str]]:
+    """Return the chips of the filter task: the filter life left, when known."""
+    step = filter_life_step(purifier.filter_life)
+    if step is None:
+        return []
+    return [{"label": _t(settings, "filter_chip", pct=step), "icon": "mdi:air-filter"}]
+
+
+def _chips_of(task: dict[str, Any]) -> list[dict[str, str]]:
+    return [{"label": c.get("label"), "icon": c.get("icon")} for c in task.get("task_chips") or []]
 
 
 def filter_task_payload(purifier: Purifier, settings: Settings) -> dict[str, Any]:
-    """Return the ``add_task`` payload of a purifier's filter task (it starts armed)."""
+    """Return the ``add_task`` payload of a purifier's filter task."""
     name = _t(settings, "filter_name", device=purifier.name)
     extra = (
         {"completion_prompt": _t(settings, "filter_prompt")}
@@ -381,6 +410,7 @@ def filter_task_payload(purifier: Purifier, settings: Settings) -> dict[str, Any
         "notes": filter_notes(purifier, settings),
         "recurrence_type": "triggered",
         "device_id": purifier.device_id,
+        "task_chips": filter_chips(purifier, settings),
         "managed_by": _managed_by(settings, FILTER_LOCKED_FIELDS, **extra),
         "source": {SOURCE_NS: {"device_id": purifier.device_id, "role": ROLE_FILTER, "name": name}},
     }
@@ -399,14 +429,24 @@ def plan_filter(
     sensor last went unavailable or off; a pending reset is then not pressed again.
     """
     if task is None:
-        if purifier.paused or purifier.filter_low is not True:
+        if purifier.paused:
             return []
-        return [CreateTask(filter_task_payload(purifier, settings))]
+        # Made at once, so the most important care shows from day one: armed when the
+        # filter is low already, else dormant until Filter Low arms it.
+        return [
+            CreateTask(
+                filter_task_payload(purifier, settings),
+                dormant=purifier.filter_low is not True,
+            )
+        ]
 
     edit = _TaskEdit(task)
     if not _resume_or_pause(edit, purifier):
         return [a] if (a := edit.action()) else []
     _rename(edit, _t(settings, "filter_name", device=purifier.name))
+    chips = filter_chips(purifier, settings)
+    if purifier.filter_life is not None and _chips_of(task) != chips:
+        edit.data["task_chips"] = chips
 
     after: list[Action] = []
     low = purifier.filter_low

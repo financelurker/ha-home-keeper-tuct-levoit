@@ -78,7 +78,7 @@ _SECTION_MODELS = "models"
 _SECTION_DEVICES = "devices"
 _FIELD_DEVICE = "device"
 # The entity fields of one purifier, in form order (keys of ENTITY_KEYS).
-_ENTITY_FIELDS = ("filter_low", "filter_reset", "runtime")
+_ENTITY_FIELDS = ("filter_low", "filter_reset", "runtime", "filter_life")
 
 
 class TuctLevoitGlueConfigFlow(ConfigFlow, domain=DOMAIN):
