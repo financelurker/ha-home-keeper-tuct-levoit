@@ -311,3 +311,96 @@ def test_existing_appliance_on_the_device_page_is_respected_and_gone_devices_cle
         "source": {SOURCE_NS: {"device_id": "d9", "role": "purifier"}},
     }
     assert logic.DeleteAsset("a-gone") in logic.plan_assets([gone], [], [], set(), S)
+
+
+# ── fitted filter on the device page ─────────────────────────────────────────
+
+
+def test_new_appliance_carries_the_fitted_filter() -> None:
+    acts = logic.plan_assets([], [], [_p()], {"d1"}, S)
+    (appliance,) = [
+        a for a in acts if isinstance(a, logic.EnsureAsset) and a.payload["kind"] == "existing"
+    ]
+    (part,) = appliance.payload["parts"]
+    assert (part["name"], part["type"]) == ("Vital 100S-RF", "wear")
+    assert "stock" not in part
+    assert "Levoit spare filters" in part["notes"]
+
+
+def test_appliance_from_v010_gets_the_part_and_keeps_the_users_parts() -> None:
+    users = {
+        "id": "u1",
+        "name": "Pre-filter",
+        "type": "wear",
+        "notes": "",
+        "part_number": "PF-1",
+        "cost": None,
+        "replace_interval": None,
+        "last_replaced": "2026-10-01",
+        "carried_uses": 0,
+        "stock": 2,
+    }
+    old = {
+        "id": "a-pur",
+        "device_id": "d1",
+        "parts": [users],
+        "managed_by": {"integration": DOMAIN},
+        "source": {SOURCE_NS: {"device_id": "d1", "role": "purifier"}},
+    }
+    (update,) = [
+        a
+        for a in logic.plan_assets([old], [], [_p()], {"d1"}, S)
+        if isinstance(a, logic.UpdateManagedAsset)
+    ]
+    kept, fitted = update.parts
+    # Sent back as the owner may send it: no unset, stock or Home Keeper-kept keys.
+    assert kept == {
+        "id": "u1",
+        "name": "Pre-filter",
+        "type": "wear",
+        "notes": "",
+        "part_number": "PF-1",
+    }
+    assert (fitted["name"], fitted["type"]) == ("Vital 100S-RF", "wear")
+    assert "id" not in fitted
+
+    # Once there, nothing more to do.
+    old["parts"] = [users, {**fitted, "id": "f1"}]
+    assert not any(
+        isinstance(a, logic.UpdateManagedAsset)
+        for a in logic.plan_assets([old], [], [_p()], {"d1"}, S)
+    )
+
+
+def test_filter_task_links_the_device_part_and_the_stock() -> None:
+    device = {
+        "id": "a-pur",
+        "device_id": "d1",
+        "parts": [{"id": "f1", "name": "Vital 100S-RF", "type": "wear", "notes": "x"}],
+        "managed_by": {"integration": DOMAIN},
+        "source": {SOURCE_NS: {"device_id": "d1", "role": "purifier"}},
+    }
+    spare = {"id": "p1", "name": "Vital 100S-RF", "type": "consumable", "notes": "Used by: Office"}
+    task = _task("filter", armed=True)
+    link = next(
+        a
+        for a in logic.plan_assets([device, _spares(spare)], [task], [_p()], {"d1"}, S)
+        if isinstance(a, logic.LinkParts)
+    )
+    assert link.parts == [
+        {"asset_id": "a-pur", "part_id": "f1", "quantity": 1},
+        {"asset_id": "a-sp", "part_id": "p1", "quantity": 1},
+    ]
+
+
+def test_users_own_appliance_gets_no_part_and_no_link() -> None:
+    theirs = {"id": "a-user", "device_id": "d1", "parts": []}
+    task = _task("filter", armed=True)
+    acts = logic.plan_assets([theirs], [task], [_p()], {"d1"}, S)
+    assert not any(isinstance(a, logic.UpdateManagedAsset) for a in acts)
+    assert all(
+        link["asset_id"] != "a-user"
+        for a in acts
+        if isinstance(a, logic.LinkParts)
+        for link in a.parts
+    )

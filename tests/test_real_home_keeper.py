@@ -32,6 +32,15 @@ from .helpers import (
 )
 
 
+def links_to(task: dict, asset: dict) -> list[str]:
+    """The part ids *task* draws on in *asset*."""
+    return [
+        link["part_id"]
+        for link in (task.get("source") or {}).get("parts") or []
+        if link["asset_id"] == asset["id"]
+    ]
+
+
 async def test_setup_builds_prefilter_spares_and_appliance(hass: HomeAssistant, presses) -> None:
     unit = await add_purifier(hass, "office", "Office")
     await setup_real_hk(hass)
@@ -90,8 +99,10 @@ async def test_filter_cycle_draws_shared_stock_and_resets_purifier(
     assert task["name"] == "Filter tauschen (Office)"
     assert task["managed_by"]["completion_prompt"]
     spares = await our_asset(hass, "spares")
+    device = await our_asset(hass, "purifier", unit.device.id)
     assert task["source"]["parts"] == [
-        {"asset_id": spares["id"], "part_id": spares["parts"][0]["id"], "quantity": 1}
+        {"asset_id": device["id"], "part_id": device["parts"][0]["id"], "quantity": 1},
+        {"asset_id": spares["id"], "part_id": spares["parts"][0]["id"], "quantity": 1},
     ]
 
     # The user ticks it off → the purifier's statistics are reset, one filter comes off
@@ -119,6 +130,73 @@ async def test_filter_cycle_draws_shared_stock_and_resets_purifier(
     assert again["id"] == task["id"]
     assert again["next_due"]
     assert presses == [unit.reset]
+
+
+async def test_device_page_shows_the_fitted_filter_and_its_last_change(
+    hass: HomeAssistant, presses
+) -> None:
+    unit = await add_purifier(hass, "office", "Office", filter_low="on")
+    await setup_real_hk(hass)
+    await setup_glue(hass)
+    await set_stock(hass, await our_asset(hass, "spares"), 2)
+
+    device = await our_asset(hass, "purifier", unit.device.id)
+    (fitted,) = device["parts"]
+    assert (fitted["name"], fitted["type"]) == ("Vital 100S-RF", "wear")
+    assert fitted["stock"] is None
+    assert fitted["last_replaced"] is None
+    # A wear part without an interval derives no task of its own.
+    assert len([t for t in await tasks(hass) if ours(t)]) == 2
+
+    task = await our_task(hass, unit, "filter")
+    await hk(hass, "complete_task", {"task_id": task["id"]})
+    await settle(hass)
+    fitted = (await our_asset(hass, "purifier", unit.device.id))["parts"][0]
+    assert fitted["last_replaced"] == dt_util.now().date().isoformat()
+    assert fitted["stock"] is None
+    assert (await our_asset(hass, "spares"))["parts"][0]["stock"] == 1  # one filter, not two
+
+
+async def test_upgrade_from_v010_adds_the_part_and_keeps_the_users_parts(
+    hass: HomeAssistant, presses
+) -> None:
+    unit = await add_purifier(hass, "office", "Office", filter_low="on")
+    hk_entry = await setup_real_hk(hass)
+    entry = await setup_glue(hass)
+    # As v0.1.0 left it: the appliance without parts, the task linked to the stock only.
+    device = await our_asset(hass, "purifier", unit.device.id)
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hk(hass, "update_managed_asset", {"asset_id": device["id"], "parts": []})
+    task = await our_task(hass, unit, "filter")
+    spares = await our_asset(hass, "spares")
+    await hk(
+        hass,
+        "set_task_consumable",
+        {
+            "task_id": task["id"],
+            "parts": [x for x in task["source"]["parts"] if x["asset_id"] == spares["id"]],
+        },
+    )
+    # The user added a part of their own on the device page.
+    await hk(
+        hass,
+        "update_asset",
+        {
+            "asset_id": device["id"],
+            "parts": [{"name": "Pre-filter", "type": "wear", "part_number": "PF-1"}],
+        },
+    )
+    assert hk_entry.state.name == "LOADED"
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    device = await our_asset(hass, "purifier", unit.device.id)
+    by_name = {p["name"]: p for p in device["parts"]}
+    assert by_name["Pre-filter"]["part_number"] == "PF-1"
+    assert by_name["Vital 100S-RF"]["type"] == "wear"
+    task = await our_task(hass, unit, "filter")
+    assert links_to(task, device) == [by_name["Vital 100S-RF"]["id"]]
+    assert links_to(task, spares) == [spares["parts"][0]["id"]]
 
 
 async def test_reset_on_the_device_clears_the_task(hass: HomeAssistant, presses) -> None:
@@ -193,7 +271,7 @@ async def test_three_purifiers_share_one_part_and_one_buy_task(
 
     for unit in units:
         task = await our_task(hass, unit, "filter")
-        assert task["source"]["parts"][0]["part_id"] == part["id"]
+        assert links_to(task, spares[0]) == [part["id"]]
         await hk(hass, "complete_task", {"task_id": task["id"]})
         await hk_idle(hass)  # the stock running low makes Home Keeper reload
     assert (await our_asset(hass, "spares"))["parts"][0]["stock"] == 0
@@ -255,7 +333,7 @@ async def test_mixed_models_get_their_own_parts_and_pre_filter_care(
     by_name = {p["name"]: p["id"] for p in spares["parts"]}
     for unit, part in ((vital, "Vital 100S-RF"), (core, "Core 300-RF")):
         task = await our_task(hass, unit, "filter")
-        assert [link["part_id"] for link in task["source"]["parts"]] == [by_name[part]]
+        assert links_to(task, spares) == [by_name[part]]
 
     core_pre = await our_task(hass, core, "prefilter")
     assert core_pre["recurrence_type"] == "floating"
@@ -388,7 +466,7 @@ async def test_options_off_retire_and_on_again_rebuild(hass: HomeAssistant, pres
     assert kept["managed_by"] is None
     assert kept["parts"][0]["stock"] == 2
     task = await our_task(hass, unit, "filter")
-    assert not task["source"].get("parts")
+    assert not task["source"].get("parts")  # neither the device part nor the stock
     assert task["next_due"]  # the filter task itself stays
 
     # Switched on again: a new managed stock; the handed-over one stays the user's.
@@ -400,7 +478,7 @@ async def test_options_off_retire_and_on_again_rebuild(hass: HomeAssistant, pres
     assert len(managed) == 1
     assert managed[0]["id"] != counted["id"]
     task = await our_task(hass, unit, "filter")
-    assert [link["asset_id"] for link in task["source"]["parts"]] == [managed[0]["id"]]
+    assert links_to(task, managed[0]) == [managed[0]["parts"][0]["id"]]
     still = next(a for a in await assets(hass) if a["id"] == counted["id"])
     assert still["managed_by"] is None
 

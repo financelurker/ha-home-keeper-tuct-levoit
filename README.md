@@ -37,7 +37,7 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 | **Replace filter (‹purifier›)** | per purifier, on its first **Filter Low** | Raised by **Filter Low**, cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. |
 | **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
 | **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |
-| **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page. |
+| **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page, and the fitted filter as a part. Ticking off *Replace filter* stamps its *last replaced* date; the spare is taken from the shared stock only. Enter no stock on this part, or a replacement takes two. Parts you add there yourself stay. |
 
 Everything it creates is marked as managed by *tuct/levoit* and protected against accidental deletion.
 
@@ -58,6 +58,10 @@ What each option does:
 | Pre-filter task | The pre-filter tasks are deleted. |
 
 Switching an option on again creates what it covers anew. An appliance handed over to you stays yours and is not taken back: with a counted *Levoit spare filters* handed over, you then have two of them, the new managed one and yours to delete.
+
+## Troubleshooting
+
+Turn on debug logging for the integration (**Settings → Devices & services → Home Keeper — tuct/levoit air purifiers → ⋮ → Enable debug logging**) and reload it. The log then shows every purifier found with its entities, each Filter Low change and every call to Home Keeper. A call Home Keeper refuses is logged as a warning (`home_keeper.<service> failed: …`) even without debug logging.
 
 ## Releases
 

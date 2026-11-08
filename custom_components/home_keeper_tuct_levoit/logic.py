@@ -37,6 +37,7 @@ from .const import (
     MARK_PAUSED,
     MARK_PENDING,
     PART_TYPE_CONSUMABLE,
+    PART_TYPE_WEAR,
     PREFILTER_LOCKED_FIELDS,
     ROLE_FILTER,
     ROLE_PREFILTER,
@@ -176,6 +177,28 @@ type Action = (
     | ReleaseAsset
     | DeleteAsset
     | LinkParts
+)
+
+# The keys of a part its owning integration writes (Home Keeper assets.PART_OWNER_KEYS,
+# v0.36.0). Stock keys are the user's and never sent.
+PART_OWNER_KEYS: tuple[str, ...] = (
+    "name",
+    "type",
+    "notes",
+    "part_number",
+    "vendor",
+    "url",
+    "cost",
+    "replace_interval",
+    "replace_unit",
+    "replace_also_every",
+    "action",
+    "use_noun",
+    "use_task_name",
+    "last_replaced",
+    "carried_uses",
+    "tag_id",
+    "require_tag_scan",
 )
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -555,6 +578,65 @@ def _links_key(links: list[dict[str, Any]]) -> list[tuple[str, str, float]]:
     )
 
 
+def _owner_view(part: dict[str, Any]) -> dict[str, Any]:
+    """Return a stored part as the owner sends it back: its id and owner keys.
+
+    ``update_managed_asset`` takes the whole part list and the owner keys from what is
+    sent, so a part restated without them would lose them (a part number the user
+    typed on a device page, say). Home Keeper itself keeps ``last_replaced``.
+    """
+    out = {
+        key: part[key]
+        for key in PART_OWNER_KEYS
+        # Unset fields come back as None, which the service schema refuses; Home
+        # Keeper keeps last_replaced and carried_uses itself.
+        if part.get(key) is not None and key not in ("last_replaced", "carried_uses")
+    }
+    out["id"] = part["id"]
+    return out
+
+
+def _find_part(asset: dict[str, Any], name: str) -> dict[str, Any] | None:
+    return next(
+        (p for p in asset.get("parts") or [] if p.get("name") == name and p.get("id")), None
+    )
+
+
+def _device_part(purifier: Purifier, settings: Settings) -> dict[str, Any]:
+    """Return the fitted-filter part of a purifier's appliance, as the owner writes it."""
+    notes = (
+        _t(settings, "device_part_notes", spares=_t(settings, "spares_name"))
+        if settings.stock_enabled
+        else _t(settings, "device_part_notes_plain")
+    )
+    return {"name": purifier.model.filter_part, "type": PART_TYPE_WEAR, "notes": notes}
+
+
+def _device_parts(
+    purifier: Purifier, existing: list[dict[str, Any]], settings: Settings
+) -> list[dict[str, Any]] | None:
+    """Return the part list of a purifier's appliance, or None when it is right.
+
+    The fitted filter is matched by name; every other part is the user's and is sent
+    back as it is.
+    """
+    wanted = _device_part(purifier, settings)
+    mine = next((p for p in existing if p.get("name") == wanted["name"]), None)
+    if mine is not None and all(mine.get(k) == v for k, v in wanted.items()):
+        return None
+    out: list[dict[str, Any]] = []
+    for part in existing:
+        if not part.get("id"):
+            continue
+        if part is mine:
+            out.append({**_owner_view(part), **wanted})
+        else:
+            out.append(_owner_view(part))
+    if mine is None:
+        out.append(wanted)
+    return out
+
+
 def plan_assets(
     assets: list[dict[str, Any]],
     tasks: list[dict[str, Any]],
@@ -595,39 +677,21 @@ def plan_assets(
             if _parts_differ(wanted, existing):
                 actions.append(UpdateManagedAsset(spares["id"], wanted))
 
-    # 2. Each filter task takes one filter of its model off the shared stock. Links the
-    #    user added to other parts stay.
-    part_ids = {
-        p.get("name"): p.get("id") for p in ((spares or {}).get("parts") or []) if p.get("id")
-    }
-    by_device = {p.device_id: p for p in purifiers}
-    for task in our_tasks(tasks):
-        src = ns(task) or {}
-        if src.get("role") != ROLE_FILTER:
-            continue
-        links = list((task.get("source") or {}).get(HK_SOURCE_PARTS) or [])
-        others = [
-            link for link in links if spares is None or link.get("asset_id") != spares.get("id")
-        ]
-        purifier = by_device.get(str(src.get("device_id")))
-        wanted = list(others)
-        if settings.stock_enabled and spares is not None and purifier is not None:
-            part_id = part_ids.get(purifier.model.filter_part)
-            if part_id is None:
-                continue  # the part arrives with the next pass
-            wanted.append({"asset_id": spares["id"], "part_id": part_id, "quantity": 1})
-        if _links_key(wanted) != _links_key(links):
-            actions.append(LinkParts(task["id"], wanted))
-
-    # 3. Each purifier gets an appliance on its own device page, unless it has one.
+    # 2. Each purifier gets an appliance on its own device page, unless it has one,
+    #    carrying the fitted filter as a part. Parts the user added there stay.
     taken = {a.get("device_id") for a in assets if a.get("device_id")}
+    by_device = {p.device_id: p for p in purifiers}
     for p in purifiers:
         ours = mine.get((p.device_id, ROLE_PURIFIER))
         if not settings.appliances_enabled:
-            if ours is not None:
-                actions.append(retire(ours))
+            continue  # retired in step 4, once the links are gone
+        if ours is not None:
+            existing = list(ours.get("parts") or [])
+            wanted_parts = _device_parts(p, existing, settings)
+            if wanted_parts is not None:
+                actions.append(UpdateManagedAsset(ours["id"], wanted_parts))
             continue
-        if ours is not None or p.device_id in taken:
+        if p.device_id in taken:
             continue
         actions.append(
             EnsureAsset(
@@ -638,12 +702,48 @@ def plan_assets(
                     "model": p.model.label,
                     "icon": "mdi:air-purifier",
                     "notes": _t(settings, "purifier_notes", model=p.model.label),
+                    "parts": [_device_part(p, settings)],
                     "managed_by": _managed_by(settings, []),
                     "source": {SOURCE_NS: {"device_id": p.device_id, "role": ROLE_PURIFIER}},
                 }
             )
         )
+
+    # 3. Each filter task stamps the filter on its device page and takes one filter of
+    #    its model off the shared stock. Links the user added to other parts stay.
+    spare_ids = {
+        p.get("name"): p.get("id") for p in ((spares or {}).get("parts") or []) if p.get("id")
+    }
+    our_ids = {a.get("id") for a in mine.values()}
+    for task in our_tasks(tasks):
+        src = ns(task) or {}
+        if src.get("role") != ROLE_FILTER:
+            continue
+        links = list((task.get("source") or {}).get(HK_SOURCE_PARTS) or [])
+        wanted = [link for link in links if link.get("asset_id") not in our_ids]
+        purifier = by_device.get(str(src.get("device_id")))
+        if purifier is not None:
+            device = mine.get((purifier.device_id, ROLE_PURIFIER))
+            if device is not None and settings.appliances_enabled:
+                part = _find_part(device, purifier.model.filter_part)
+                if part is None:
+                    continue  # the part arrives with the next pass
+                wanted.append({"asset_id": device["id"], "part_id": part["id"], "quantity": 1})
+            if spares is not None and settings.stock_enabled:
+                part_id = spare_ids.get(purifier.model.filter_part)
+                if part_id is None:
+                    continue  # the part arrives with the next pass
+                wanted.append({"asset_id": spares["id"], "part_id": part_id, "quantity": 1})
+        if _links_key(wanted) != _links_key(links):
+            actions.append(LinkParts(task["id"], wanted))
+
     # 4. What the options no longer want is retired, after the links above are gone.
+    if not settings.appliances_enabled:
+        actions += [
+            retire(mine[(p.device_id, ROLE_PURIFIER)])
+            for p in purifiers
+            if (p.device_id, ROLE_PURIFIER) in mine
+        ]
     if spares is not None and not settings.stock_enabled:
         actions.append(retire(spares))
     for (device_id, role), asset in mine.items():

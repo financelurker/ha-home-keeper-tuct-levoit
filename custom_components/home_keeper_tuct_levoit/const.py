@@ -99,6 +99,9 @@ FILTER_LOCKED_FIELDS = ["device_id", "recurrence_type"]
 PREFILTER_LOCKED_FIELDS = ["device_id"]
 SPARES_LOCKED_FIELDS = ["parts"]
 PART_TYPE_CONSUMABLE = "consumable"
+# The filter fitted in a purifier, on its device page: a wear part without a
+# replacement interval, so Home Keeper derives no task of its own from it.
+PART_TYPE_WEAR = "wear"
 
 # ── Text per language (task data, so it follows the Home Assistant language) ─
 TEXT: dict[str, dict[str, str]] = {
@@ -129,6 +132,14 @@ TEXT: dict[str, dict[str, str]] = {
         ),
         "part_notes": "Used by: {devices}",
         "purifier_notes": "Levoit {model}, ESPHome firmware by tuct/levoit.",
+        "device_part_notes": (
+            "The filter fitted in this purifier, stamped each time *Replace filter* is "
+            "ticked off. Spares are counted in *{spares}*: enter no stock here, or a "
+            "replacement takes two."
+        ),
+        "device_part_notes_plain": (
+            "The filter fitted in this purifier, stamped each time *Replace filter* is ticked off."
+        ),
         "description": (
             "Levoit air purifiers on tuct/levoit ESPHome firmware: filter replacement "
             "from Filter Low, pre-filter cleaning, one shared spare-filter stock."
@@ -161,6 +172,15 @@ TEXT: dict[str, dict[str, str]] = {
         ),
         "part_notes": "Verwendet von: {devices}",
         "purifier_notes": "Levoit {model}, ESPHome-Firmware von tuct/levoit.",
+        "device_part_notes": (
+            "Der in diesem Luftreiniger eingesetzte Filter; das Datum wird bei jedem "
+            "Abhaken von *Filter tauschen* gesetzt. Ersatzfilter werden in *{spares}* "
+            "gezählt: hier keinen Bestand eintragen, sonst zählt ein Tausch doppelt."
+        ),
+        "device_part_notes_plain": (
+            "Der in diesem Luftreiniger eingesetzte Filter; das Datum wird bei jedem "
+            "Abhaken von *Filter tauschen* gesetzt."
+        ),
         "description": (
             "Levoit-Luftreiniger mit tuct/levoit-ESPHome-Firmware: Filtertausch aus "
             "Filter Low, Vorfilterreinigung, ein gemeinsamer Ersatzfilter-Vorrat."
