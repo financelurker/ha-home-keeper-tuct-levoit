@@ -355,15 +355,24 @@ def _rename(edit: _TaskEdit, wanted: str) -> None:
 # ── filter task ──────────────────────────────────────────────────────────────
 
 
+def resets_on_done(purifier: Purifier, settings: Settings) -> bool:
+    """Return whether ticking the filter task off presses the purifier's reset."""
+    return settings.reset_on_done and purifier.reset_entity is not None
+
+
 def filter_notes(purifier: Purifier, settings: Settings) -> str:
-    key = "filter_notes" if settings.reset_on_done else "filter_notes_manual"
+    key = "filter_notes" if resets_on_done(purifier, settings) else "filter_notes_manual"
     return _t(settings, key, part=purifier.filter_part)
 
 
 def filter_task_payload(purifier: Purifier, settings: Settings) -> dict[str, Any]:
     """Return the ``add_task`` payload of a purifier's filter task (it starts armed)."""
     name = _t(settings, "filter_name", device=purifier.name)
-    extra = {"completion_prompt": _t(settings, "filter_prompt")} if settings.reset_on_done else {}
+    extra = (
+        {"completion_prompt": _t(settings, "filter_prompt")}
+        if resets_on_done(purifier, settings)
+        else {}
+    )
     return {
         "name": name,
         "notes": filter_notes(purifier, settings),
