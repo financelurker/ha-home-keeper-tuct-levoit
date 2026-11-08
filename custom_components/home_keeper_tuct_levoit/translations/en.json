@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "tuct/levoit air purifiers",
+        "description": "Keeps the filter tasks of Levoit air purifiers running tuct/levoit ESPHome firmware in Home Keeper. One entry covers every purifier."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already set up. One entry covers every purifier."
+    }
+  }
+}
