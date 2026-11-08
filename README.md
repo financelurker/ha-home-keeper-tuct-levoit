@@ -6,7 +6,7 @@ Keeps the filters of Levoit air purifiers running the [tuct/levoit](https://gith
 
 It is a small *glue* integration in the sense of Home Keeper's [glue pattern](https://github.com/prestomation/ha-home-keeper/blob/main/docs/GLUE_INTEGRATIONS.md): it changes neither the purifier firmware nor Home Keeper and talks to both only through the registries, entity states, services and events.
 
-> **Work in progress.** This version sets up the integration only; the purifier handling, the options and the ESPHome configuration guide follow in the next releases.
+> **Work in progress.** The options page and the ESPHome configuration guide follow in the next releases; until then the defaults below apply.
 
 ## Installation
 
@@ -29,6 +29,35 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 ## Setup
 
 **Settings → Devices & services → Add integration → Home Keeper — tuct/levoit air purifiers.** One instance covers every purifier.
+
+## What it creates in Home Keeper
+
+| | Created | Content |
+|---|---|---|
+| **Replace filter (‹purifier›)** | per purifier, on its first **Filter Low** | Raised by **Filter Low**, cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. |
+| **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
+| **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |
+| **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page. |
+
+Everything it creates is marked as managed by *tuct/levoit* and protected against accidental deletion.
+
+### Switching an option off or removing the integration
+
+Both follow Home Keeper's [guidance for companion integrations](https://github.com/prestomation/ha-home-keeper/blob/main/docs/INTEGRATING.md) (§8, *Uninstall*): what the integration created and no longer needs is cleaned up, except what you counted.
+
+- **An appliance with a stock count** entered on one of its parts is handed over to you, so the spare filters in the drawer stay counted. Usually that is *Levoit spare filters*; a purifier appliance only if you added counted parts to it. It becomes an ordinary Home Keeper appliance: no longer managed, free to edit or delete.
+- **Every other appliance** it created is deleted.
+- **Tasks** the option covers are deleted, including their history: the pre-filter tasks when the pre-filter task is switched off, every task when the integration is removed.
+
+What each option does:
+
+| Switched off | Effect |
+|---|---|
+| Spare-filter stock | The filter tasks are unlinked from the stock, then *Levoit spare filters* is handed over or deleted as above. |
+| Purifier appliances | The appliances on the device pages are handed over or deleted as above. |
+| Pre-filter task | The pre-filter tasks are deleted. |
+
+Switching an option on again creates what it covers anew. An appliance handed over to you stays yours and is not taken back: with a counted *Levoit spare filters* handed over, you then have two of them, the new managed one and yours to delete.
 
 ## Releases
 
@@ -54,7 +83,7 @@ ruff check . && ruff format --check .
 pytest
 ```
 
-The tests run in a real Home Assistant test instance (`pytest-homeassistant-custom-component`), against Home Keeper's test fake. They need Home Keeper in `custom_components/home_keeper`; CI copies a pinned release there (see `.github/workflows/validate.yml`), locally those tests are skipped without it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The tests run in a real Home Assistant test instance (`pytest-homeassistant-custom-component`), end to end against the real Home Keeper. They need Home Keeper in `custom_components/home_keeper`; CI copies a pinned release there (see `.github/workflows/validate.yml`), copy it there locally too. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
