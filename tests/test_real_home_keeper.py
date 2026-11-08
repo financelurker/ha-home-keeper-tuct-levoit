@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
+from custom_components.home_keeper_tuct_levoit import logic
 from custom_components.home_keeper_tuct_levoit.const import DOMAIN, SOURCE_NS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -341,7 +342,7 @@ async def test_mixed_models_get_their_own_parts_and_pre_filter_care(
         assert links_to(task, spares) == [by_name[part]]
 
     core_pre = await our_task(hass, core, "prefilter")
-    assert core_pre["recurrence_type"] == "floating"
+    assert (core_pre["recurrence_type"], core_pre["next_due"]) == ("triggered", None)
     assert "Nicht waschen." in core_pre["notes"]
     assert (await our_asset(hass, "purifier", pro.device.id))["model"] == "Vital 200S"
 
@@ -352,9 +353,8 @@ async def test_runtime_sensor_comes_and_goes(hass: HomeAssistant, presses) -> No
     await setup_glue(hass)
 
     pre = await our_task(hass, unit, "prefilter")
-    assert pre["recurrence_type"] == "floating"
-    assert (pre["interval"], pre["unit"]) == (4, "weeks")
-    assert dt_util.parse_datetime(pre["next_due"]) > dt_util.now() + timedelta(days=27)
+    assert (pre["recurrence_type"], pre["next_due"]) == ("triggered", None)
+    assert pre["task_chips"][0]["label"].startswith("Fällig am ")
 
     # The user flashes the Fan Runtime sensor: same task, now by fan hours.
     ent = er.async_get(hass).async_get_or_create(
@@ -372,6 +372,7 @@ async def test_runtime_sensor_comes_and_goes(hass: HomeAssistant, presses) -> No
     assert pre2["id"] == pre["id"]
     assert pre2["recurrence_type"] == "sensor"
     assert pre2["sensor"]["entity_id"] == ent.entity_id
+    assert not pre2.get("task_chips")  # the meter shows its own countdown
 
     # Home Keeper's next tick anchors the meter at the current 5 h …
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
@@ -382,10 +383,13 @@ async def test_runtime_sensor_comes_and_goes(hass: HomeAssistant, presses) -> No
     await settle(hass)
     assert (await our_task(hass, unit, "prefilter"))["next_due"]
 
-    # The sensor is removed again: back to weeks.
+    # The sensor is removed again: back to weeks. It was just armed by the meter, but
+    # 4 weeks have not passed since the last decision, so it waits again.
     er.async_get(hass).async_remove(ent.entity_id)
     await settle(hass)
-    assert (await our_task(hass, unit, "prefilter"))["recurrence_type"] == "floating"
+    pre3 = await our_task(hass, unit, "prefilter")
+    assert (pre3["recurrence_type"], pre3["next_due"]) == ("triggered", None)
+    assert pre3["completions"] == []
 
 
 async def test_device_rename_and_user_rename(hass: HomeAssistant, presses) -> None:
@@ -583,28 +587,19 @@ async def test_dust_sensor_task_per_model(hass: HomeAssistant, presses) -> None:
 
     task = await our_task(hass, vital, "sensor")
     assert task["name"] == "Staubsensor reinigen (Office)"
-    assert (task["recurrence_type"], task["interval"], task["unit"]) == ("floating", 2, "months")
+    assert (task["recurrence_type"], task["next_due"]) == ("triggered", None)
+    assert task["completions"] == []
     assert "Wattestäbchen" in task["notes"]
     assert "Schaumstoff" in task["notes"]
-    assert dt_util.parse_datetime(task["next_due"]) > dt_util.now() + timedelta(days=55)
+    due = logic.add_interval(dt_util.now(), 2, "months")
+    assert task["task_chips"][0]["label"] == f"Fällig am {due.day:02d}.{due.month:02d}.{due.year}"
 
     task = await our_task(hass, core, "sensor")
-    assert (task["interval"], task["unit"]) == (3, "months")
     assert "Staubsauger" in task["notes"]
 
     # No sensor (Core 200S), or no Levoit instruction found (Sprout): no task.
     assert await our_task(hass, small, "sensor") is None
     assert await our_task(hass, sprout, "sensor") is None
-
-    # An interval the user set on the task stays.
-    await hk(
-        hass,
-        "update_task",
-        {"task_id": (await our_task(hass, vital, "sensor"))["id"], "interval": 1},
-    )
-    await hass.config_entries.async_reload(entry.entry_id)
-    await settle(hass)
-    assert (await our_task(hass, vital, "sensor"))["interval"] == 1
 
     # Switched off: deleted.
     hass.config_entries.async_update_entry(entry, options={"sensor_enabled": False})
@@ -612,6 +607,76 @@ async def test_dust_sensor_task_per_model(hass: HomeAssistant, presses) -> None:
     assert await our_task(hass, vital, "sensor") is None
     assert await our_task(hass, core, "sensor") is None
     assert await our_task(hass, vital, "prefilter") is not None
+
+
+async def _todo(hass: HomeAssistant) -> list[str]:
+    """The items on Home Keeper's to-do list (its entity id follows the language)."""
+    (entity_id,) = [s.entity_id for s in hass.states.async_all("todo")]
+    resp = await hass.services.async_call(
+        "todo", "get_items", {"entity_id": entity_id}, blocking=True, return_response=True
+    )
+    return sorted(item["summary"] for item in resp[entity_id]["items"])
+
+
+async def test_only_due_care_is_on_the_to_do_list(hass: HomeAssistant, presses, freezer) -> None:
+    unit = await add_purifier(hass, "office", "Office", runtime=False)
+    await setup_real_hk(hass)
+    await setup_glue(hass)
+    assert await _todo(hass) == []  # filter, pre-filter and dust sensor all wait
+
+    # 4 weeks on: the hourly check arms the pre-filter task, the dust sensor still waits.
+    freezer.tick(timedelta(weeks=4, hours=1))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert await _todo(hass) == ["Vorfilter reinigen (Office)"]
+
+    # Ticked off: it waits another 4 weeks; 2 months on, the dust sensor is due.
+    await hk(hass, "complete_task", {"task_id": (await our_task(hass, unit, "prefilter"))["id"]})
+    await settle(hass)
+    assert await _todo(hass) == []
+    freezer.tick(timedelta(weeks=5))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert await _todo(hass) == ["Staubsensor reinigen (Office)", "Vorfilter reinigen (Office)"]
+
+
+async def test_calendar_task_of_the_previous_version_is_converted(
+    hass: HomeAssistant, presses
+) -> None:
+    unit = await add_purifier(hass, "office", "Office")
+    await setup_real_hk(hass)
+    # As the previous version left it: a floating task, on the to-do list.
+    await hk(
+        hass,
+        "add_task",
+        {
+            "name": "Staubsensor reinigen (Office)",
+            "recurrence_type": "floating",
+            "interval": 2,
+            "unit": "months",
+            "last_completed": dt_util.now().isoformat(),
+            "device_id": unit.device.id,
+            "source": {
+                SOURCE_NS: {
+                    "device_id": unit.device.id,
+                    "role": "sensor",
+                    "name": "Staubsensor reinigen (Office)",
+                    "rule": "infrared:2:de",
+                }
+            },
+        },
+        response=True,
+    )
+    old = await our_task(hass, unit, "sensor")
+    assert await _todo(hass) == ["Staubsensor reinigen (Office)"]
+
+    await setup_glue(hass)
+    task = await our_task(hass, unit, "sensor")
+    assert task["id"] == old["id"]  # the same task, history kept
+    assert (task["recurrence_type"], task["next_due"]) == ("triggered", None)
+    assert task["completions"] == old["completions"]  # converting completes nothing
+    assert task["task_chips"][0]["label"].startswith("Fällig am ")
+    assert await _todo(hass) == []
 
 
 async def test_filter_task_ahead_draws_nothing_and_shows_filter_life(

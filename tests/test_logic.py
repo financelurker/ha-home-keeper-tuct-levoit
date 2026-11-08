@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from custom_components.home_keeper_tuct_levoit import logic
 from custom_components.home_keeper_tuct_levoit.catalog import model_for, model_key
@@ -170,16 +170,19 @@ def test_prefilter_by_runtime_then_by_weeks() -> None:
     task = _task("prefilter", armed=False, src={"rule": rule})
     assert logic.plan_prefilter(task, _p(), S, now=NOW) == []
 
-    (update,) = logic.plan_prefilter(task, _p(runtime_entity=None), S, now=NOW)
-    assert update.data["recurrence_type"] == "floating"
-    assert (update.data["interval"], update.data["unit"]) == (4, "weeks")
+    # Runtime sensor gone: from now on a calendar task the glue arms, waiting.
+    update, skip = logic.plan_prefilter(task, _p(runtime_entity=None), S, now=NOW)
+    assert update.data["recurrence_type"] == "triggered"
+    assert update.data["task_chips"] == [{"label": "Due 2026-12-06", "icon": "mdi:calendar-clock"}]
     assert _src(update)["rule"].startswith("calendar:")
+    assert isinstance(skip, logic.SkipTask)
 
 
-def test_prefilter_calendar_starts_today_and_core_is_vacuumed() -> None:
+def test_prefilter_calendar_waits_and_core_is_vacuumed() -> None:
     core = _p(model=model_for("core300s"), runtime_entity=None)
     (create,) = logic.plan_prefilter(None, core, S, now=NOW)
-    assert create.payload["last_completed"] == NOW.isoformat()
+    assert create.dormant is True
+    assert create.payload["recurrence_type"] == "triggered"
     assert "Do not wash it." in create.payload["notes"]
 
 
@@ -440,33 +443,77 @@ def test_without_a_reset_button_the_task_asks_for_a_manual_reset() -> None:
 # ── dust-sensor task ─────────────────────────────────────────────────────────
 
 
-def test_dust_sensor_task() -> None:
+def test_dust_sensor_task_waits_off_the_to_do_list() -> None:
     (create,) = logic.plan_sensor(None, _p(), S, now=NOW)
     payload = create.payload
-    assert (payload["interval"], payload["unit"]) == (2, "months")
-    assert payload["last_completed"] == NOW.isoformat()
+    assert create.dormant is True
+    assert payload["recurrence_type"] == "triggered"
+    assert payload["task_chips"] == [{"label": "Due 2027-01-08", "icon": "mdi:calendar-clock"}]
     assert payload["managed_by"]["locked_fields"] == ["device_id"]
     assert "moistened cotton swab" in payload["notes"]
-    rule = payload["source"][SOURCE_NS]["rule"]
-    task = _task("sensor", armed=False, src={"rule": rule})
-    task["name"] = "Clean dust sensor (Office)"
-    task["source"][SOURCE_NS]["name"] = task["name"]
-    assert logic.plan_sensor(task, _p(), S, now=NOW) == []
-    # A new language rewrites the notes and the interval.
-    (update,) = logic.plan_sensor(
-        task, _p(), logic.Settings(config_entry_id="e1", lang="de"), now=NOW
-    )
-    assert "Wattestäbchen" in update.data["notes"]
     off = logic.Settings(config_entry_id="e1", sensor_enabled=False)
+    task = _task("sensor", armed=False)
     assert logic.plan_sensor(task, _p(), off, now=NOW) == [logic.DeleteTask("t-sensor")]
 
 
+def _waiting(**kw) -> dict:
+    (create,) = logic.plan_sensor(None, _p(), S, now=NOW)
+    task = {
+        "id": "t-sensor",
+        "name": create.payload["name"],
+        "recurrence_type": "triggered",
+        "next_due": None,
+        "task_chips": create.payload["task_chips"],
+        "source": create.payload["source"],
+        "skips": [{"ts": NOW.isoformat()}],  # the skip that made it wait
+    }
+    return {**task, **kw}
+
+
+def test_calendar_task_is_armed_when_its_interval_has_passed() -> None:
+    assert logic.plan_sensor(_waiting(), _p(), S, now=NOW) == []
+    later = NOW + timedelta(days=61)
+    assert logic.plan_sensor(_waiting(), _p(), S, now=later) == [logic.ArmTask("t-sensor")]
+    # Armed already: nothing more.
+    armed = _waiting(next_due=later.isoformat())
+    assert logic.plan_sensor(armed, _p(), S, now=later) == []
+    # Ticked off: counts again from the completion, with a new date on the chip.
+    done = _waiting(last_completed=later.isoformat())
+    (update,) = logic.plan_sensor(done, _p(), S, now=later)
+    assert update.data["task_chips"][0]["label"] == "Due 2027-03-08"
+    # Skipped when due ("not now"): counts from the skip, like Home Keeper's backstop.
+    skipped = _waiting(skips=[{"ts": NOW.isoformat()}, {"ts": later.isoformat()}])
+    (update,) = logic.plan_sensor(skipped, _p(), S, now=later)
+    assert isinstance(update, logic.UpdateTask)
+
+
+def test_calendar_task_of_an_earlier_version_is_converted() -> None:
+    old = _waiting(
+        recurrence_type="floating",
+        next_due=(NOW + timedelta(days=50)).isoformat(),
+        skips=[],
+        created=(NOW - timedelta(days=10)).isoformat(),
+        task_chips=[],
+    )
+    update, skip = logic.plan_sensor(old, _p(), S, now=NOW)
+    assert update.data["recurrence_type"] == "triggered"
+    assert update.data["task_chips"][0]["label"] == "Due 2026-12-29"  # from its creation
+    assert isinstance(skip, logic.SkipTask)
+
+
 def test_dust_sensor_by_model() -> None:
-    laser = logic.plan_sensor(None, _p(model=model_for("everestair")), S, now=NOW)
-    assert laser[0].payload["interval"] == 3
-    assert "vacuum" in laser[0].payload["notes"]
+    (laser,) = logic.plan_sensor(None, _p(model=model_for("everestair")), S, now=NOW)
+    assert laser.payload["task_chips"][0]["label"] == "Due 2027-02-08"
+    assert "vacuum" in laser.payload["notes"]
     for key in ("core200s", "sprout", "unknown9"):
         assert logic.plan_sensor(None, _p(model=model_for(key)), S, now=NOW) == []
+
+
+def test_add_interval() -> None:
+    jan31 = datetime(2027, 1, 31, 9, 0, tzinfo=UTC)
+    assert logic.add_interval(jan31, 1, "months").date().isoformat() == "2027-02-28"
+    assert logic.add_interval(jan31, 11, "months").date().isoformat() == "2027-12-31"
+    assert logic.add_interval(jan31, 2, "weeks").date().isoformat() == "2027-02-14"
 
 
 def test_filter_life_chip_in_5_percent_steps() -> None:

@@ -109,8 +109,9 @@ DOCS_URL = "https://github.com/financelurker/ha-home-keeper-tuct-levoit"
 # update_task, ours too, so the name stays unlocked (it follows a device rename) and the
 # pre-filter schedule stays unlocked (it follows the runtime sensor and the options).
 FILTER_LOCKED_FIELDS = ["device_id", "recurrence_type"]
-PREFILTER_LOCKED_FIELDS = ["device_id"]
-SENSOR_LOCKED_FIELDS = ["device_id"]
+# The pre-filter and dust-sensor tasks change type (meter, or triggered and armed by
+# the glue), so only the device is locked.
+CALENDAR_LOCKED_FIELDS = ["device_id"]
 SPARES_LOCKED_FIELDS = ["parts"]
 PART_TYPE_CONSUMABLE = "consumable"
 # The filter fitted in a purifier, on its device page: a wear part without a
@@ -146,6 +147,8 @@ TEXT: dict[str, dict[str, str]] = {
         "whichever comes first.",
         "due_calendar": "Due every {weeks} weeks. Add a `Fan Runtime` sensor to the "
         "ESPHome config to count fan hours instead.",
+        "due_chip": "Due {date}",
+        "calendar_skip_note": "Not due yet: waiting until its interval has passed.",
         "sensor_name": "Clean dust sensor ({device})",
         "sensor_infrared": (
             "Unplug the purifier and open the dust sensor cover. Clean the air inlet, the "
@@ -220,6 +223,8 @@ TEXT: dict[str, dict[str, str]] = {
         "nachdem, was zuerst eintritt.",
         "due_calendar": "Fällig alle {weeks} Wochen. Mit einem `Fan Runtime`-Sensor in der "
         "ESPHome-Config wird stattdessen nach Lüfterstunden gezählt.",
+        "due_chip": "Fällig am {date}",
+        "calendar_skip_note": "Noch nicht fällig: wartet, bis das Intervall vorbei ist.",
         "sensor_name": "Staubsensor reinigen ({device})",
         "sensor_infrared": (
             "Luftreiniger ausstecken und die Abdeckung des Staubsensors öffnen. "

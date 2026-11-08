@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -22,7 +22,11 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, STATE_OFF, STATE_ON
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.util import dt as dt_util, slugify
 
 from . import logic
@@ -86,6 +90,7 @@ _REGISTRY_DEBOUNCE_SECONDS = 2.0
 # While Home Keeper is not loaded, try again this often, this many times (5 min).
 _CATCH_UP_SECONDS = 3.0
 _CATCH_UP_ATTEMPTS = 100
+_CALENDAR_CHECK_INTERVAL = timedelta(hours=1)
 
 
 class HomeKeeperUnavailable(Exception):
@@ -180,6 +185,8 @@ class LevoitGlue:
         on_unload(bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_registry_updated))
         on_unload(bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, self._on_registry_updated))
         on_unload(self._teardown)
+        # The calendar tasks are armed by the glue: look once an hour whether one is due.
+        on_unload(async_track_time_interval(self.hass, self._on_hourly, _CALENDAR_CHECK_INTERVAL))
         await self._register_companion()
         if self.hass.is_running:
             await self.async_reconcile()
@@ -195,6 +202,9 @@ class LevoitGlue:
             if cancel is not None:
                 cancel()
                 setattr(self, name, None)
+
+    async def _on_hourly(self, _now: datetime) -> None:
+        await self.async_reconcile()
 
     async def _on_started(self, _event: Event) -> None:
         self._cancel_started = None
@@ -621,6 +631,10 @@ class LevoitGlue:
                             "note": TEXT[self.settings.lang]["filter_ahead_note"],
                         },
                     )
+            case logic.SkipTask(task_id=task_id, note=note):
+                await self._call(
+                    HK_SERVICE_SKIP_TASK, {"task_id": task_id, "origin": ORIGIN, "note": note}
+                )
             case logic.ArmTask(task_id=task_id):
                 await self._call(HK_SERVICE_TRIGGER_TASK, {"task_id": task_id})
             case logic.ClearTask(task_id=task_id):

@@ -110,11 +110,13 @@ Turn on debug logging (see [Troubleshooting](#troubleshooting)). When no purifie
 
 ## What it creates in Home Keeper
 
+Every task waits (*Monitored* in Home Keeper) and comes onto Home Keeper's to-do list only when the care is due: *Replace filter* when the purifier reports Filter Low, *Clean pre-filter* after 300 fan hours (Home Keeper's meter) or the weeks, *Clean dust sensor* after its months. Home Keeper would put a calendar task on its to-do list months ahead, so the calendar tasks are armed by the integration instead: it looks once an hour, counts from the last time the task was ticked off or skipped, and shows the date it comes due as a chip on the task.
+
 | | Created | Content |
 |---|---|---|
 | **Replace filter (‹purifier›)** | per purifier, at once | Waits (*Monitored*) until **Filter Low** raises it, and is cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. A chip shows the filter life left (*Filter %*) in 5 % steps. Made ahead of the first Filter Low, it carries one *skipped* entry in its history: that is how Home Keeper puts such a task to waiting without counting a replacement. |
 | **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
-| **Clean dust sensor (‹purifier›)** | per purifier with a dust sensor | Every 2 months for the Vital 100S/200S (moistened, then dry cotton swab on the air inlet, outlet and sensor lens, as the label on the purifier says), every 3 months for the Core 300S/400S/600S and EverestAir (vacuum at the sensor openings), as in Levoit's manuals. The Core 200S has no sensor; the Sprout has one, but no Levoit instruction for it was found, so it gets no task for now. An interval you set on the task stays. |
+| **Clean dust sensor (‹purifier›)** | per purifier with a dust sensor | Every 2 months for the Vital 100S/200S (moistened, then dry cotton swab on the air inlet, outlet and sensor lens, as the label on the purifier says), every 3 months for the Core 300S/400S/600S and EverestAir (vacuum at the sensor openings), as in Levoit's manuals. The Core 200S has no sensor; the Sprout has one, but no Levoit instruction for it was found, so it gets no task for now. |
 | **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |
 | **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page, and the fitted filter as a part. Ticking off *Replace filter* stamps its *last replaced* date; the spare is taken from the shared stock only. Enter no stock on this part, or a replacement takes two. Parts you add there yourself stay. |
 
