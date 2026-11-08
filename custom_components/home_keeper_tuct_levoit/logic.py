@@ -65,6 +65,14 @@ class Purifier:
     runtime_entity: str | None = None
     # Device disabled: its tasks are switched off, not deleted.
     paused: bool = False
+    # The filter it takes: the per-device or per-model name from the options, else the
+    # catalog's. It is the part's name in the shared stock and on the device page.
+    filter: str | None = None
+
+    @property
+    def filter_part(self) -> str:
+        """Return the name of the filter this purifier takes."""
+        return self.filter or self.model.filter_part
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,7 +357,7 @@ def _rename(edit: _TaskEdit, wanted: str) -> None:
 
 def filter_notes(purifier: Purifier, settings: Settings) -> str:
     key = "filter_notes" if settings.reset_on_done else "filter_notes_manual"
-    return _t(settings, key, part=purifier.model.filter_part)
+    return _t(settings, key, part=purifier.filter_part)
 
 
 def filter_task_payload(purifier: Purifier, settings: Settings) -> dict[str, Any]:
@@ -550,7 +558,7 @@ def _spares_parts(
     """Return the owner's part list: one consumable per filter type, with its users."""
     users: dict[str, list[str]] = {}
     for p in purifiers:
-        users.setdefault(p.model.filter_part, []).append(p.name)
+        users.setdefault(p.filter_part, []).append(p.name)
     by_name = {part.get("name"): part for part in existing}
     parts: list[dict[str, Any]] = []
     for name in sorted(users):
@@ -602,6 +610,16 @@ def _find_part(asset: dict[str, Any], name: str) -> dict[str, Any] | None:
     )
 
 
+_DEVICE_PART_NOTES = frozenset(
+    note
+    for text in TEXT.values()
+    for note in (
+        text["device_part_notes"].format(spares=text["spares_name"]),
+        text["device_part_notes_plain"],
+    )
+)
+
+
 def _device_part(purifier: Purifier, settings: Settings) -> dict[str, Any]:
     """Return the fitted-filter part of a purifier's appliance, as the owner writes it."""
     notes = (
@@ -609,7 +627,7 @@ def _device_part(purifier: Purifier, settings: Settings) -> dict[str, Any]:
         if settings.stock_enabled
         else _t(settings, "device_part_notes_plain")
     )
-    return {"name": purifier.model.filter_part, "type": PART_TYPE_WEAR, "notes": notes}
+    return {"name": purifier.filter_part, "type": PART_TYPE_WEAR, "notes": notes}
 
 
 def _device_parts(
@@ -622,6 +640,10 @@ def _device_parts(
     """
     wanted = _device_part(purifier, settings)
     mine = next((p for p in existing if p.get("name") == wanted["name"]), None)
+    if mine is None:
+        # Renamed in the options: the part that carries our notes is still ours, and
+        # keeping its id keeps its last_replaced.
+        mine = next((p for p in existing if p.get("notes") in _DEVICE_PART_NOTES), None)
     if mine is not None and all(mine.get(k) == v for k, v in wanted.items()):
         return None
     out: list[dict[str, Any]] = []
@@ -725,12 +747,12 @@ def plan_assets(
         if purifier is not None:
             device = mine.get((purifier.device_id, ROLE_PURIFIER))
             if device is not None and settings.appliances_enabled:
-                part = _find_part(device, purifier.model.filter_part)
+                part = _find_part(device, purifier.filter_part)
                 if part is None:
                     continue  # the part arrives with the next pass
                 wanted.append({"asset_id": device["id"], "part_id": part["id"], "quantity": 1})
             if spares is not None and settings.stock_enabled:
-                part_id = spare_ids.get(purifier.model.filter_part)
+                part_id = spare_ids.get(purifier.filter_part)
                 if part_id is None:
                     continue  # the part arrives with the next pass
                 wanted.append({"asset_id": spares["id"], "part_id": part_id, "quantity": 1})
@@ -755,3 +777,36 @@ def plan_assets(
         ):
             actions.append(retire(asset))
     return actions
+
+
+# ── renaming a spare filter in the options ───────────────────────────────────
+
+
+def plan_spare_renames(before: dict[str, str], after: dict[str, str]) -> dict[str, str]:
+    """Return the spare parts to rename when the options change the filter names.
+
+    *before* and *after* map each purifier's device id to the filter it takes. A name
+    is renamed (same part, so its stock and history stay) only when every purifier
+    that took it now takes one and the same new name and none still takes the old one.
+    A purifier moving to a name of its own (a Pet Allergy filter, say) gets a new part
+    instead, and the others keep theirs.
+    """
+    renames: dict[str, str] = {}
+    old_names = set(before.values())
+    still_used = set(after.values())
+    for old in old_names - still_used:
+        targets = {after[d] for d, name in before.items() if name == old and d in after}
+        if len(targets) == 1:
+            new = targets.pop()
+            if new not in old_names:
+                renames[old] = new
+    return renames
+
+
+def rename_parts(parts: list[dict[str, Any]], renames: dict[str, str]) -> list[dict[str, Any]]:
+    """Return the owner's part list of the spare-filter appliance with *renames* applied."""
+    return [
+        {**_owner_view(part), "name": renames.get(part.get("name"), part.get("name"))}
+        for part in parts
+        if part.get("id")
+    ]

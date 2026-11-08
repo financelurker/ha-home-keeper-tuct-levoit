@@ -59,6 +59,9 @@ from .const import (
     MANAGED_ICON,
     MARK_PENDING,
     OPT_APPLIANCES_ENABLED,
+    OPT_DEVICE_FILTERS,
+    OPT_ENTITIES,
+    OPT_FILTER_NAMES,
     OPT_PREFILTER_ENABLED,
     OPT_PREFILTER_HOURS,
     OPT_PREFILTER_WEEKS,
@@ -68,6 +71,7 @@ from .const import (
     PROJECT_MANUFACTURER,
     PROJECT_MODEL_PREFIX,
     ROLE_FILTER,
+    ROLE_SPARES,
     SOURCE_NS,
     TEXT,
 )
@@ -214,22 +218,51 @@ class LevoitGlue:
             _LOGGER.debug("Home Keeper companion registration failed", exc_info=True)
 
     # ── registry → purifiers ─────────────────────────────────────────────────
+    def detect_entities(self, device_id: str) -> dict[str, str]:
+        """Return the entities of a purifier found automatically, by key."""
+        found: dict[str, str] = {}
+        for ent in er.async_entries_for_device(
+            er.async_get(self.hass), device_id, include_disabled_entities=True
+        ):
+            if ent.platform != ESPHOME_DOMAIN or ent.disabled_by is not None:
+                continue
+            if (which := entity_key(ent)) is not None:
+                found.setdefault(which, ent.entity_id)
+        return found
+
+    def assigned_entities(self, device_id: str, options: Any = None) -> dict[str, str]:
+        """Return the entities assigned to a purifier by hand that still exist."""
+        opts = self.entry.options if options is None else options
+        ent_reg = er.async_get(self.hass)
+        assigned = (opts.get(OPT_ENTITIES) or {}).get(device_id) or {}
+        out: dict[str, str] = {}
+        for key, entity_id in assigned.items():
+            if key in ENTITY_KEYS and entity_id and ent_reg.async_get(entity_id) is not None:
+                out[key] = entity_id
+            elif entity_id:
+                _LOGGER.warning(
+                    "Entity %s assigned by hand to %s no longer exists; detecting it "
+                    "automatically instead",
+                    entity_id,
+                    key,
+                )
+        return out
+
+    @staticmethod
+    def filter_for(device_id: str, model_key: str, options: Any) -> str | None:
+        """Return the filter name the options give a purifier, if any."""
+        return (options.get(OPT_DEVICE_FILTERS) or {}).get(device_id) or (
+            options.get(OPT_FILTER_NAMES) or {}
+        ).get(model_key)
+
     def scan(self) -> list[logic.Purifier]:
         """Read every purifier and its entities out of the registries."""
-        ent_reg = er.async_get(self.hass)
         purifiers: list[logic.Purifier] = []
         for device in dr.async_get(self.hass).devices:
             key = purifier_key(self.hass, device)
             if key is None:
                 continue
-            found: dict[str, str] = {}
-            for ent in er.async_entries_for_device(
-                ent_reg, device.id, include_disabled_entities=True
-            ):
-                if ent.platform != ESPHOME_DOMAIN or ent.disabled_by is not None:
-                    continue
-                if (which := entity_key(ent)) is not None:
-                    found.setdefault(which, ent.entity_id)
+            found = {**self.detect_entities(device.id), **self.assigned_entities(device.id)}
             low_entity = found.get("filter_low")
             purifiers.append(
                 logic.Purifier(
@@ -241,6 +274,7 @@ class LevoitGlue:
                     reset_entity=found.get("filter_reset"),
                     runtime_entity=found.get("runtime"),
                     paused=device.disabled_by is not None,
+                    filter=self.filter_for(device.id, key, self.entry.options),
                 )
             )
         self._purifiers = {p.device_id: p for p in purifiers}
@@ -368,6 +402,42 @@ class LevoitGlue:
         """
         if logic.ns({"source": event.data.get("source")}) is not None:
             self._on_registry_updated(event)
+
+    @property
+    def purifiers(self) -> list[logic.Purifier]:
+        """Return the purifiers of the last scan."""
+        return list(self._purifiers.values())
+
+    async def async_rename_spares(self, renames: dict[str, str]) -> bool:
+        """Rename spare parts in place, so their stock and history stay.
+
+        Called by the options flow before it saves new filter names. Returns False when
+        Home Keeper could not be reached; the renamed filters then get new parts and
+        the old ones keep any stock counted on them.
+        """
+        if not renames:
+            return True
+        async with self._lock:
+            try:
+                assets = await self._list_assets()
+            except HomeKeeperUnavailable:
+                return False
+            spares = logic.index(logic.our_assets(assets)).get((None, ROLE_SPARES))
+            if spares is None:
+                return True
+            _LOGGER.debug("Renaming spare parts %s", renames)
+            try:
+                await self._call(
+                    HK_SERVICE_UPDATE_MANAGED_ASSET,
+                    {
+                        "asset_id": spares["id"],
+                        "parts": logic.rename_parts(list(spares.get("parts") or []), renames),
+                    },
+                    required=True,
+                )
+            except HomeKeeperUnavailable:
+                return False
+        return True
 
     # ── reconcile ────────────────────────────────────────────────────────────
     async def async_reconcile(self) -> None:

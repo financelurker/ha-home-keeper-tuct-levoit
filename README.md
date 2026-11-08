@@ -6,7 +6,7 @@ Keeps the filters of Levoit air purifiers running the [tuct/levoit](https://gith
 
 It is a small *glue* integration in the sense of Home Keeper's [glue pattern](https://github.com/prestomation/ha-home-keeper/blob/main/docs/GLUE_INTEGRATIONS.md): it changes neither the purifier firmware nor Home Keeper and talks to both only through the registries, entity states, services and events.
 
-> **Work in progress.** The options page and the ESPHome configuration guide follow in the next releases; until then the defaults below apply.
+> **Work in progress.** The ESPHome configuration guide follows in a next release.
 
 ## Installation
 
@@ -29,6 +29,16 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 ## Setup
 
 **Settings → Devices & services → Add integration → Home Keeper — tuct/levoit air purifiers.** One instance covers every purifier.
+
+## Options
+
+**Settings → Devices & services → Home Keeper — tuct/levoit air purifiers → Configure** offers three pages:
+
+| Page | What you set |
+|---|---|
+| **General** | Shared spare-filter stock, appliances on the purifiers, reset filter statistics on done, the *Clean pre-filter* task, and its interval: every … fan hours (default 300) or at the latest every … weeks (default 4). |
+| **Spare filters** | The filter name per model, and optionally per purifier (a purifier that takes a Pet Allergy filter, say, gets its own part with its own stock). Leave a field empty for the default. Renaming the filter of a model renames its part, so the stock and the history stay. |
+| **Devices and entities** | Per purifier, the entities found automatically, and the ones you assign by hand when your ESPHome YAML names them differently. Leave a field empty to detect it automatically. |
 
 ## What it creates in Home Keeper
 

@@ -9,5 +9,84 @@
     "abort": {
       "single_instance_allowed": "Bereits eingerichtet. Ein Eintrag deckt alle Luftreiniger ab."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "tuct/levoit-Luftreiniger",
+        "description": "{count} Luftreiniger gefunden. Was möchtest du einstellen?",
+        "menu_options": {
+          "general": "Allgemein",
+          "filters": "Ersatzfilter",
+          "devices": "Geräte und Entitäten"
+        },
+        "menu_option_descriptions": {
+          "general": "Ersatzfilter-Vorrat, Geräteeinträge, Reset beim Abhaken, Vorfilter-Intervall",
+          "filters": "Filtername pro Modell oder pro Gerät, z. B. eine Pet-Allergy-Variante",
+          "devices": "Erkannte Entitäten prüfen oder von Hand zuordnen"
+        }
+      },
+      "general": {
+        "title": "Allgemein",
+        "data": {
+          "stock_enabled": "Gemeinsamer Ersatzfilter-Vorrat",
+          "appliances_enabled": "Geräteeinträge an den Luftreinigern",
+          "reset_on_done": "Filterstatistik beim Abhaken zurücksetzen",
+          "prefilter_enabled": "Task „Vorfilter reinigen“",
+          "prefilter_hours": "Vorfilter reinigen alle … Lüfterstunden",
+          "prefilter_weeks": "Oder spätestens alle … Wochen"
+        },
+        "data_description": {
+          "stock_enabled": "Ein Eintrag „Levoit-Ersatzfilter“ mit einem Teil pro Filtertyp. Jeder Filtertausch nimmt einen vom Vorrat. Aus: gelöscht, oder an dich übergeben, wenn du dort Bestand gezählt hast.",
+          "appliances_enabled": "Modell, Notizen und der eingesetzte Filter auf der Geräteseite, nur wo noch kein Eintrag existiert. Aus: gelöscht, oder an dich übergeben, wenn du dort Bestand gezählt hast.",
+          "reset_on_done": "Hakst du „Filter tauschen“ in Home Keeper ab, drückt die Integration am Luftreiniger „Filter Reset“.",
+          "prefilter_enabled": "Für jeden Luftreiniger. Aus: Die Vorfilter-Tasks werden gelöscht.",
+          "prefilter_hours": "Braucht einen „Fan Runtime“-Sensor. Ohne ihn zählen nur die Wochen.",
+          "prefilter_weeks": "Levoit empfiehlt alle 2–4 Wochen. Fällig ist, was zuerst eintritt."
+        }
+      },
+      "filters": {
+        "title": "Ersatzfilter",
+        "description": "Die Namen sind die Teile im gemeinsamen Vorrat „Levoit-Ersatzfilter“ und auf den Geräteseiten. Umbenennen behält Bestand und Historie. Feld leer lassen für den Standard.\n\nStandard:\n{defaults}",
+        "sections": {
+          "models": {
+            "name": "Standard pro Modell",
+            "description": "Der Filter, den jeder Luftreiniger dieses Modells nimmt."
+          },
+          "devices": {
+            "name": "Pro Gerät (optional)",
+            "description": "Ein Luftreiniger mit einem anderen Filter, z. B. einer Pet-Allergy-Variante, bekommt ein eigenes Teil mit eigenem Bestand."
+          }
+        }
+      },
+      "devices": {
+        "title": "Geräte und Entitäten",
+        "description": "Welchen Luftreiniger möchtest du prüfen?",
+        "data": {
+          "device": "Luftreiniger"
+        }
+      },
+      "device": {
+        "title": "{name}",
+        "description": "{model}. Feld leer lassen, um es automatisch zu erkennen: zuerst über den Namen in der ESPHome-YAML, sonst über die Entitäts-ID.\n\nAutomatisch erkannt:\n{detected}",
+        "data": {
+          "filter_low": "Filter Low (Pflicht)",
+          "filter_reset": "Filter-Reset-Taste",
+          "runtime": "Lüfterlaufzeit (optional)"
+        },
+        "data_description": {
+          "filter_low": "Löst „Filter tauschen“ aus.",
+          "filter_reset": "Wird beim Abhaken von „Filter tauschen“ gedrückt.",
+          "runtime": "Ohne diesen Sensor ist der Vorfilter nur nach Wochen fällig."
+        }
+      }
+    },
+    "error": {
+      "filter_low_missing": "Für diesen Luftreiniger wurde kein Filter-Low-Sensor erkannt. Bitte einen auswählen."
+    },
+    "abort": {
+      "not_loaded": "Die Integration ist nicht geladen. Lade sie neu und versuche es nochmal.",
+      "no_purifiers": "Kein Luftreiniger gefunden. Prüfe den ESPHome-Projektnamen (tuct.levoit-<Modell>)."
+    }
   }
 }
