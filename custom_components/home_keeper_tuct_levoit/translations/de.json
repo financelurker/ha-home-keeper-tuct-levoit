@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "tuct/levoit-Luftreiniger",
+        "description": "Hält die Filter-Tasks von Levoit-Luftreinigern mit tuct/levoit-ESPHome-Firmware in Home Keeper aktuell. Ein Eintrag deckt alle Luftreiniger ab."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Bereits eingerichtet. Ein Eintrag deckt alle Luftreiniger ab."
+    }
+  }
+}
