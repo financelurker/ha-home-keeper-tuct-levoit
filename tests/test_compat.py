@@ -20,6 +20,7 @@ def test_roles_and_marks() -> None:
     # Written into every task's and appliance's source namespace.
     assert (const.ROLE_FILTER, const.ROLE_PREFILTER) == ("filter", "prefilter")
     assert (const.ROLE_PURIFIER, const.ROLE_SPARES) == ("purifier", "spares")
+    assert const.ROLE_SENSOR == "sensor"
     assert (const.MARK_PAUSED, const.MARK_PENDING) == ("paused", "pending_reset")
 
 
@@ -32,6 +33,10 @@ def test_option_keys() -> None:
         const.OPT_PREFILTER_ENABLED,
         const.OPT_PREFILTER_HOURS,
         const.OPT_PREFILTER_WEEKS,
+        const.OPT_SENSOR_ENABLED,
+        const.OPT_FILTER_NAMES,
+        const.OPT_DEVICE_FILTERS,
+        const.OPT_ENTITIES,
     ] == [
         "stock_enabled",
         "appliances_enabled",
@@ -39,6 +44,10 @@ def test_option_keys() -> None:
         "prefilter_enabled",
         "prefilter_hours",
         "prefilter_weeks",
+        "sensor_enabled",
+        "filter_names",
+        "device_filters",
+        "entities",
     ]
 
 

@@ -432,3 +432,35 @@ def test_without_a_reset_button_the_task_asks_for_a_manual_reset() -> None:
     (create,) = logic.plan_filter(None, _p(filter_low=True, reset_entity=None), S)
     assert "completion_prompt" not in create.payload["managed_by"]
     assert "press **Filter Reset**" in create.payload["notes"]
+
+
+# ── dust-sensor task ─────────────────────────────────────────────────────────
+
+
+def test_dust_sensor_task() -> None:
+    (create,) = logic.plan_sensor(None, _p(), S, now=NOW)
+    payload = create.payload
+    assert (payload["interval"], payload["unit"]) == (2, "months")
+    assert payload["last_completed"] == NOW.isoformat()
+    assert payload["managed_by"]["locked_fields"] == ["device_id"]
+    assert "moistened cotton swab" in payload["notes"]
+    rule = payload["source"][SOURCE_NS]["rule"]
+    task = _task("sensor", armed=False, src={"rule": rule})
+    task["name"] = "Clean dust sensor (Office)"
+    task["source"][SOURCE_NS]["name"] = task["name"]
+    assert logic.plan_sensor(task, _p(), S, now=NOW) == []
+    # A new language rewrites the notes and the interval.
+    (update,) = logic.plan_sensor(
+        task, _p(), logic.Settings(config_entry_id="e1", lang="de"), now=NOW
+    )
+    assert "Wattestäbchen" in update.data["notes"]
+    off = logic.Settings(config_entry_id="e1", sensor_enabled=False)
+    assert logic.plan_sensor(task, _p(), off, now=NOW) == [logic.DeleteTask("t-sensor")]
+
+
+def test_dust_sensor_by_model() -> None:
+    laser = logic.plan_sensor(None, _p(model=model_for("everestair")), S, now=NOW)
+    assert laser[0].payload["interval"] == 3
+    assert "vacuum" in laser[0].payload["notes"]
+    for key in ("core200s", "sprout", "unknown9"):
+        assert logic.plan_sensor(None, _p(model=model_for(key)), S, now=NOW) == []

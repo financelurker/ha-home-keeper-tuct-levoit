@@ -103,7 +103,7 @@ Turn on debug logging (see [Troubleshooting](#troubleshooting)). When no purifie
 
 | Page | What you set |
 |---|---|
-| **General** | Shared spare-filter stock, appliances on the purifiers, reset filter statistics on done, the *Clean pre-filter* task, and its interval: every … fan hours (default 300) or at the latest every … weeks (default 4). |
+| **General** | Shared spare-filter stock, appliances on the purifiers, reset filter statistics on done, the *Clean pre-filter* task and its interval (every … fan hours, default 300, or at the latest every … weeks, default 4), and the *Clean dust sensor* task. |
 | **Spare filters** | The filter name per model, and optionally per purifier (a purifier that takes a Pet Allergy filter, say, gets its own part with its own stock). Leave a field empty for the default. Renaming the filter of a model renames its part, so the stock and the history stay. |
 | **Devices and entities** | Per purifier, the entities found automatically, and the ones you assign by hand when your ESPHome YAML names them differently. Leave a field empty to detect it automatically. |
 
@@ -113,6 +113,7 @@ Turn on debug logging (see [Troubleshooting](#troubleshooting)). When no purifie
 |---|---|---|
 | **Replace filter (‹purifier›)** | per purifier, on its first **Filter Low** | Raised by **Filter Low**, cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. |
 | **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
+| **Clean dust sensor (‹purifier›)** | per purifier with a dust sensor | Every 2 months for the Vital 100S/200S (moistened, then dry cotton swab on the air inlet, outlet and sensor lens, as the label on the purifier says), every 3 months for the Core 300S/400S/600S and EverestAir (vacuum at the sensor openings), as in Levoit's manuals. The Core 200S has no sensor; the Sprout has one, but no Levoit instruction for it was found, so it gets no task for now. An interval you set on the task stays. |
 | **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |
 | **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page, and the fitted filter as a part. Ticking off *Replace filter* stamps its *last replaced* date; the spare is taken from the shared stock only. Enter no stock on this part, or a replacement takes two. Parts you add there yourself stay. |
 
@@ -124,7 +125,7 @@ Both follow Home Keeper's [guidance for companion integrations](https://github.c
 
 - **An appliance with a stock count** entered on one of its parts is handed over to you, so the spare filters in the drawer stay counted. Usually that is *Levoit spare filters*; a purifier appliance only if you added counted parts to it. It becomes an ordinary Home Keeper appliance: no longer managed, free to edit or delete.
 - **Every other appliance** it created is deleted.
-- **Tasks** the option covers are deleted, including their history: the pre-filter tasks when the pre-filter task is switched off, every task when the integration is removed.
+- **Tasks** the option covers are deleted, including their history: the pre-filter or dust-sensor tasks when that task is switched off, every task when the integration is removed.
 
 What each option does:
 
@@ -133,6 +134,7 @@ What each option does:
 | Spare-filter stock | The filter tasks are unlinked from the stock, then *Levoit spare filters* is handed over or deleted as above. |
 | Purifier appliances | The appliances on the device pages are handed over or deleted as above. |
 | Pre-filter task | The pre-filter tasks are deleted. |
+| Dust-sensor task | The dust-sensor tasks are deleted. |
 
 Switching an option on again creates what it covers anew. An appliance handed over to you stays yours and is not taken back: with a counted *Levoit spare filters* handed over, you then have two of them, the new managed one and yours to delete.
 
