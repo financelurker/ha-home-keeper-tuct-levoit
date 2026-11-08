@@ -86,7 +86,7 @@
     },
     "abort": {
       "not_loaded": "Die Integration ist nicht geladen. Lade sie neu und versuche es nochmal.",
-      "no_purifiers": "Kein Luftreiniger gefunden. Prüfe den ESPHome-Projektnamen (tuct.levoit-<Modell>)."
+      "no_purifiers": "Kein Luftreiniger gefunden. Prüfe den ESPHome-Projektnamen tuct.levoit-…, z. B. tuct.levoit-vital100s."
     }
   }
 }

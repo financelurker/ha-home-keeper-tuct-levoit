@@ -86,7 +86,7 @@
     },
     "abort": {
       "not_loaded": "The integration is not loaded. Reload it and try again.",
-      "no_purifiers": "No air purifier found. Check the ESPHome project name (tuct.levoit-<model>)."
+      "no_purifiers": "No air purifier found. Check the ESPHome project name tuct.levoit-…, e.g. tuct.levoit-vital100s."
     }
   }
 }
