@@ -42,6 +42,7 @@ HK_SERVICE_UPDATE_TASK = "update_task"
 HK_SERVICE_DELETE_TASK = "delete_task"
 HK_SERVICE_COMPLETE_TASK = "complete_task"
 HK_SERVICE_TRIGGER_TASK = "trigger_task"
+HK_SERVICE_SKIP_TASK = "skip_task"
 HK_SERVICE_LIST_ASSETS = "list_assets"
 HK_SERVICE_ADD_ASSET = "add_asset"
 HK_SERVICE_UPDATE_ASSET = "update_asset"
@@ -69,6 +70,8 @@ ENTITY_KEYS: dict[str, tuple[str, tuple[str, ...]]] = {
     "filter_low": ("binary_sensor", ("filter_low",)),
     "filter_reset": ("button", ("filter_reset", "reset_filter_stats", "reset_filter")),
     "runtime": ("sensor", ("fan_runtime",)),
+    # tuct's "Filter %": the filter life left, shown on the filter task.
+    "filter_life": ("sensor", ("filter", "filter_life_left", "filter_life")),
 }
 
 # ── Options ──────────────────────────────────────────────────────────────────
@@ -127,6 +130,14 @@ TEXT: dict[str, dict[str, str]] = {
             "**Filter Reset** on the purifier and tick this off."
         ),
         "filter_prompt": "Ticking this off resets the filter statistics on the purifier.",
+        "filter_life_hint": (
+            "**Filter %** on the purifier counts as if the fan ran at full speed around "
+            "the clock, so a filter usually lasts longer than it suggests."
+        ),
+        "filter_chip": "Filter {pct} % left",
+        "filter_ahead_note": (
+            "Created ahead of the first Filter Low: armed when the purifier reports it."
+        ),
         "prefilter_name": "Clean pre-filter ({device})",
         "how_wash": "Take out the washable pre-filter, vacuum it, rinse it under running "
         "water and let it dry completely.",
@@ -179,6 +190,7 @@ TEXT: dict[str, dict[str, str]] = {
         "entity_filter_low": "Filter Low",
         "entity_filter_reset": "Filter reset button",
         "entity_runtime": "Fan runtime",
+        "entity_filter_life": "Filter life left",
     },
     "de": {
         "filter_name": "Filter tauschen ({device})",
@@ -191,6 +203,15 @@ TEXT: dict[str, dict[str, str]] = {
             "Gerät **Filter Reset** drücken und abhaken."
         ),
         "filter_prompt": "Abhaken setzt die Filterstatistik am Luftreiniger zurück.",
+        "filter_life_hint": (
+            "**Filter %** am Luftreiniger rechnet so, als liefe der Lüfter rund um die "
+            "Uhr auf voller Stufe; ein Filter hält meist länger, als der Wert vermuten "
+            "lässt."
+        ),
+        "filter_chip": "Filter noch {pct} %",
+        "filter_ahead_note": (
+            "Vor dem ersten Filter Low angelegt: wird scharf, sobald der Luftreiniger es meldet."
+        ),
         "prefilter_name": "Vorfilter reinigen ({device})",
         "how_wash": "Waschbaren Vorfilter herausnehmen, absaugen, unter fließendem Wasser "
         "ausspülen und vollständig trocknen lassen.",
@@ -244,5 +265,6 @@ TEXT: dict[str, dict[str, str]] = {
         "entity_filter_low": "Filter Low",
         "entity_filter_reset": "Filter-Reset-Taste",
         "entity_runtime": "Lüfterlaufzeit",
+        "entity_filter_life": "Filter-Restlaufzeit",
     },
 }

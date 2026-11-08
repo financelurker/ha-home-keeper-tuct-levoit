@@ -65,6 +65,7 @@ Home Assistant splits the name at the dot: the device page then shows manufactur
 | `binary_sensor` *Filter Low* (required) | `type: filter_low` | Raises *Replace filter*. |
 | `button` *Filter Reset* | `type: reset_filter_stats` | Pressed when you tick off *Replace filter*. Without it, the task asks you to press it yourself. |
 | `number` *Filter Months* | `type: filter_lifetime_months` | Not read by the integration, but it sets after how many months of use the purifier reports *Filter Low*. |
+| `sensor` *Filter %* | `type: filter_life_left` | Shown on *Replace filter* as a chip. tuct counts it as if the fan ran at full speed around the clock, so a filter usually lasts longer than it suggests; *Filter Low* comes on below 5 %. |
 
 The integration matches them by their `name:` in the YAML, else by the end of the entity ID. If you renamed one (say *Swap Filter*), assign it under **Configure → Devices and entities**.
 
@@ -111,7 +112,7 @@ Turn on debug logging (see [Troubleshooting](#troubleshooting)). When no purifie
 
 | | Created | Content |
 |---|---|---|
-| **Replace filter (‹purifier›)** | per purifier, on its first **Filter Low** | Raised by **Filter Low**, cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. |
+| **Replace filter (‹purifier›)** | per purifier, at once | Waits (*Monitored*) until **Filter Low** raises it, and is cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. A chip shows the filter life left (*Filter %*) in 5 % steps. Made ahead of the first Filter Low, it carries one *skipped* entry in its history: that is how Home Keeper puts such a task to waiting without counting a replacement. |
 | **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
 | **Clean dust sensor (‹purifier›)** | per purifier with a dust sensor | Every 2 months for the Vital 100S/200S (moistened, then dry cotton swab on the air inlet, outlet and sensor lens, as the label on the purifier says), every 3 months for the Core 300S/400S/600S and EverestAir (vacuum at the sensor openings), as in Levoit's manuals. The Core 200S has no sensor; the Sprout has one, but no Levoit instruction for it was found, so it gets no task for now. An interval you set on the task stays. |
 | **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |

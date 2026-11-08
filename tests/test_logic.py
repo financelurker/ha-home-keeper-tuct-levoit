@@ -61,12 +61,15 @@ def test_model_key() -> None:
 # ── filter task ──────────────────────────────────────────────────────────────
 
 
-def test_filter_task_created_on_first_low_only() -> None:
-    assert logic.plan_filter(None, _p(), S) == []
-    assert logic.plan_filter(None, _p(filter_low=None), S) == []
+def test_filter_task_is_made_at_once() -> None:
+    # Filter fine or unknown: made dormant, so it shows from day one.
+    for low in (False, None):
+        (dormant,) = logic.plan_filter(None, _p(filter_low=low), S)
+        assert dormant.dormant is True
     assert logic.plan_filter(None, _p(filter_low=True, paused=True), S) == []
     (create,) = logic.plan_filter(None, _p(filter_low=True), S)
     assert isinstance(create, logic.CreateTask)
+    assert create.dormant is False
     payload = create.payload
     assert payload["recurrence_type"] == "triggered"
     assert payload["name"] == "Replace filter (Office)"
@@ -464,3 +467,18 @@ def test_dust_sensor_by_model() -> None:
     assert "vacuum" in laser[0].payload["notes"]
     for key in ("core200s", "sprout", "unknown9"):
         assert logic.plan_sensor(None, _p(model=model_for(key)), S, now=NOW) == []
+
+
+def test_filter_life_chip_in_5_percent_steps() -> None:
+    (create,) = logic.plan_filter(None, _p(filter_life_entity="sensor.f", filter_life=63.4), S)
+    assert create.payload["task_chips"] == [{"label": "Filter 60 % left", "icon": "mdi:air-filter"}]
+    assert "**Filter %**" in create.payload["notes"]
+    task = _task("filter", armed=False, task_chips=create.payload["task_chips"])
+    # Still 60 %: nothing to write. 59.9 %: the next step.
+    assert logic.plan_filter(task, _p(filter_life_entity="sensor.f", filter_life=60.0), S) == []
+    (update,) = logic.plan_filter(task, _p(filter_life_entity="sensor.f", filter_life=59.9), S)
+    assert update.data["task_chips"][0]["label"] == "Filter 55 % left"
+    # Unknown (unavailable): the last chip stays.
+    assert logic.plan_filter(task, _p(filter_life_entity="sensor.f", filter_life=None), S) == []
+    assert logic.filter_life_step(100.0) == 100
+    assert logic.filter_life_step(4.99) == 0

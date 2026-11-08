@@ -46,8 +46,13 @@ async def test_setup_builds_prefilter_spares_and_appliance(hass: HomeAssistant, 
     await setup_real_hk(hass)
     await setup_glue(hass)
 
-    # Filter fine → no filter task yet (created on the first Filter Low).
-    assert await our_task(hass, unit, "filter") is None
+    # Filter fine → the filter task is there, dormant, without a completion.
+    task = await our_task(hass, unit, "filter")
+    assert task["recurrence_type"] == "triggered"
+    assert task["next_due"] is None
+    assert task["completions"] == []
+    assert len(task["skips"]) == 1
+    assert "Vor dem ersten Filter Low" in task["skips"][0]["note"]
 
     pre = await our_task(hass, unit, "prefilter")
     assert pre is not None
@@ -607,3 +612,34 @@ async def test_dust_sensor_task_per_model(hass: HomeAssistant, presses) -> None:
     assert await our_task(hass, vital, "sensor") is None
     assert await our_task(hass, core, "sensor") is None
     assert await our_task(hass, vital, "prefilter") is not None
+
+
+async def test_filter_task_ahead_draws_nothing_and_shows_filter_life(
+    hass: HomeAssistant, presses
+) -> None:
+    unit = await add_purifier(hass, "office", "Office", filter_life=63.4)
+    await setup_real_hk(hass)
+    await setup_glue(hass)
+    await set_stock(hass, await our_asset(hass, "spares"), 6)
+    await settle(hass)
+
+    task = await our_task(hass, unit, "filter")
+    assert task["next_due"] is None
+    assert [c["label"] for c in task["task_chips"]] == ["Filter noch 60 %"]
+    # Made ahead: no filter taken off the stock, no date stamped on the device page.
+    assert (await our_asset(hass, "spares"))["parts"][0]["stock"] == 6
+    assert (await our_asset(hass, "purifier", unit.device.id))["parts"][0]["last_replaced"] is None
+    assert presses == []
+
+    life = f"{unit.filter_low.split('.')[1].removesuffix('_filter_low')}"
+    hass.states.async_set(f"sensor.{life}_filter", "61.2", {"unit_of_measurement": "%"})
+    await settle(hass)
+    assert [c["label"] for c in (await our_task(hass, unit, "filter"))["task_chips"]] == [
+        "Filter noch 60 %"
+    ]
+    hass.states.async_set(f"sensor.{life}_filter", "4.9", {"unit_of_measurement": "%"})
+    hass.states.async_set(unit.filter_low, "on")
+    await settle(hass)
+    task = await our_task(hass, unit, "filter")
+    assert task["next_due"]  # Filter Low arms the same task
+    assert [c["label"] for c in task["task_chips"]] == ["Filter noch 0 %"]

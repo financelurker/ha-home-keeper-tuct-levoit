@@ -72,6 +72,7 @@ async def add_purifier(
     filter_low: str = "off",
     runtime_hours: float = 10.0,
     reset_name: str = "Filter Reset",
+    filter_life: float | None = None,
 ) -> Unit:
     """An ESPHome entry with one purifier device and its entities in the registry."""
     entry = MockConfigEntry(domain="esphome", title=name, unique_id=slug)
@@ -105,6 +106,9 @@ async def add_purifier(
         hass.states.async_set(
             run, str(runtime_hours), {"unit_of_measurement": "h", "state_class": "total_increasing"}
         )
+    if filter_life is not None:
+        life = _add("sensor", "filter", "Filter %")
+        hass.states.async_set(life, str(filter_life), {"unit_of_measurement": "%"})
     return Unit(entry=entry, device=device, filter_low=low, reset=btn, runtime=run)
 
 

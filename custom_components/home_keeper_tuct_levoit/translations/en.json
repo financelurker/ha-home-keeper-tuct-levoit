@@ -74,12 +74,14 @@
         "data": {
           "filter_low": "Filter Low (required)",
           "filter_reset": "Filter reset button",
-          "runtime": "Fan runtime (optional)"
+          "runtime": "Fan runtime (optional)",
+          "filter_life": "Filter life left (optional)"
         },
         "data_description": {
           "filter_low": "Raises “Replace filter”.",
           "filter_reset": "Pressed when you tick off “Replace filter”.",
-          "runtime": "Without this sensor the pre-filter is due by weeks only."
+          "runtime": "Without this sensor the pre-filter is due by weeks only.",
+          "filter_life": "tuct’s “Filter %”, shown on the filter task in 5 % steps."
         }
       }
     },

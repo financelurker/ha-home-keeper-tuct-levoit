@@ -53,6 +53,7 @@ from .const import (
     HK_SERVICE_LIST_TASKS,
     HK_SERVICE_REGISTER_COMPANION,
     HK_SERVICE_SET_TASK_CONSUMABLE,
+    HK_SERVICE_SKIP_TASK,
     HK_SERVICE_TRIGGER_TASK,
     HK_SERVICE_UPDATE_ASSET,
     HK_SERVICE_UPDATE_MANAGED_ASSET,
@@ -112,6 +113,13 @@ def entity_key(entry: er.RegistryEntry) -> str | None:
         if name in slugs or any(object_id == s or object_id.endswith(f"_{s}") for s in slugs):
             return key
     return None
+
+
+def _state_float(state: Any) -> float | None:
+    try:
+        return float(state.state) if state is not None else None
+    except TypeError, ValueError:
+        return None
 
 
 def _state_on(state: Any) -> bool | None:
@@ -276,6 +284,10 @@ class LevoitGlue:
                     filter_low=_state_on(self.hass.states.get(low_entity)) if low_entity else None,
                     reset_entity=found.get("filter_reset"),
                     runtime_entity=found.get("runtime"),
+                    filter_life_entity=found.get("filter_life"),
+                    filter_life=_state_float(self.hass.states.get(found["filter_life"]))
+                    if found.get("filter_life")
+                    else None,
                     paused=device.disabled_by is not None,
                     filter=self.filter_for(device.id, key, self.entry.options),
                 )
@@ -311,7 +323,12 @@ class LevoitGlue:
         if self._unsub_state is not None:
             self._unsub_state()
             self._unsub_state = None
-        watched = [p.filter_low_entity for p in self._purifiers.values() if p.filter_low_entity]
+        watched = [
+            entity_id
+            for p in self._purifiers.values()
+            for entity_id in (p.filter_low_entity, p.filter_life_entity)
+            if entity_id
+        ]
         if watched:
             self._unsub_state = async_track_state_change_event(self.hass, watched, self._on_state)
 
@@ -331,16 +348,33 @@ class LevoitGlue:
     async def _on_state(self, event: Event) -> None:
         entity_id = event.data.get("entity_id")
         purifier = next(
-            (p for p in self._purifiers.values() if p.filter_low_entity == entity_id), None
+            (
+                p
+                for p in self._purifiers.values()
+                if entity_id in (p.filter_low_entity, p.filter_life_entity)
+            ),
+            None,
         )
         if purifier is None:
             return
-        low = _state_on(event.data.get("new_state"))
-        _LOGGER.debug("Filter Low of %r is now %s", purifier.name, low)
-        purifier = replace(purifier, filter_low=low)
-        self._purifiers[purifier.device_id] = purifier
-        if low is not True:
-            self._pressed.discard(purifier.device_id)
+        if entity_id == purifier.filter_life_entity:
+            # Filter % moves in hundredths every few minutes; only a new 5 % step is
+            # worth a call into Home Keeper.
+            life = _state_float(event.data.get("new_state"))
+            step = logic.filter_life_step(life)
+            changed = step is not None and step != logic.filter_life_step(purifier.filter_life)
+            purifier = replace(purifier, filter_life=life)
+            self._purifiers[purifier.device_id] = purifier
+            if not changed:
+                return
+            _LOGGER.debug("Filter life of %r is now %s %%", purifier.name, step)
+        else:
+            low = _state_on(event.data.get("new_state"))
+            _LOGGER.debug("Filter Low of %r is now %s", purifier.name, low)
+            purifier = replace(purifier, filter_low=low)
+            self._purifiers[purifier.device_id] = purifier
+            if low is not True:
+                self._pressed.discard(purifier.device_id)
         if not self._hk_loaded():
             self._note_down()
             return
@@ -573,8 +607,20 @@ class LevoitGlue:
     async def _execute(self, action: logic.Action) -> None:
         _LOGGER.debug("Executing %s", action)
         match action:
-            case logic.CreateTask(payload=payload):
-                await self._call(HK_SERVICE_ADD_TASK, payload, response=True)
+            case logic.CreateTask(payload=payload, dormant=dormant):
+                resp = await self._call(HK_SERVICE_ADD_TASK, payload, response=True)
+                task_id = resp.get("task_id") if isinstance(resp, dict) else None
+                if dormant and task_id:
+                    # Home Keeper creates a triggered task armed; a skip disarms it
+                    # without a completion (no stock drawn, no part stamped).
+                    await self._call(
+                        HK_SERVICE_SKIP_TASK,
+                        {
+                            "task_id": task_id,
+                            "origin": ORIGIN,
+                            "note": TEXT[self.settings.lang]["filter_ahead_note"],
+                        },
+                    )
             case logic.ArmTask(task_id=task_id):
                 await self._call(HK_SERVICE_TRIGGER_TASK, {"task_id": task_id})
             case logic.ClearTask(task_id=task_id):
