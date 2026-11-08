@@ -15,6 +15,8 @@ from datetime import datetime
 import logging
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, STATE_OFF, STATE_ON
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
@@ -242,6 +244,29 @@ class LevoitGlue:
                 )
             )
         self._purifiers = {p.device_id: p for p in purifiers}
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            if not purifiers:
+                _LOGGER.debug(
+                    "No purifier found: no device of the esphome integration has "
+                    "manufacturer %r and a model starting with %r (ESPHome project name "
+                    "tuct.levoit-<model>)",
+                    PROJECT_MANUFACTURER,
+                    PROJECT_MODEL_PREFIX,
+                )
+            for p in purifiers:
+                _LOGGER.debug(
+                    "Purifier %r (%s, model %s, filter %s%s): filter_low=%s (%s), "
+                    "filter_reset=%s, fan_runtime=%s",
+                    p.name,
+                    p.device_id,
+                    p.model.key,
+                    p.model.filter_part,
+                    ", disabled" if p.paused else "",
+                    p.filter_low_entity,
+                    p.filter_low,
+                    p.reset_entity,
+                    p.runtime_entity,
+                )
         self._follow_states()
         return purifiers
 
@@ -274,6 +299,7 @@ class LevoitGlue:
         if purifier is None:
             return
         low = _state_on(event.data.get("new_state"))
+        _LOGGER.debug("Filter Low of %r is now %s", purifier.name, low)
         purifier = replace(purifier, filter_low=low)
         self._purifiers[purifier.device_id] = purifier
         if low is not True:
@@ -352,6 +378,7 @@ class LevoitGlue:
                 self._note_down()
             return
         async with self._lock:
+            _LOGGER.debug("Reconciling")
             purifiers = self.scan()
             self._pressed &= {p.device_id for p in purifiers if p.filter_low is True}
             try:
@@ -451,7 +478,8 @@ class LevoitGlue:
                 self._note_down()
                 raise HomeKeeperUnavailable(service) from err
             _LOGGER.warning("home_keeper.%s failed: %s", service, err)
-        except (ValueError, KeyError) as err:
+        except (ValueError, KeyError, vol.Invalid) as err:
+            # A payload Home Keeper's schema refuses must not take the whole pass down.
             _LOGGER.warning("home_keeper.%s failed: %s", service, err)
         if required:
             raise HomeKeeperUnavailable(service)
@@ -470,6 +498,7 @@ class LevoitGlue:
         return list(resp["assets"])
 
     async def _execute(self, action: logic.Action) -> None:
+        _LOGGER.debug("Executing %s", action)
         match action:
             case logic.CreateTask(payload=payload):
                 await self._call(HK_SERVICE_ADD_TASK, payload, response=True)
