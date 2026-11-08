@@ -368,13 +368,14 @@ async def test_without_reset_button_or_reset_on_done_nothing_is_pressed(
     assert (await our_task(hass, plain, "filter"))["next_due"]
 
 
-async def test_options_off_clean_up_and_on_again_rebuild(hass: HomeAssistant, presses) -> None:
+async def test_options_off_retire_and_on_again_rebuild(hass: HomeAssistant, presses) -> None:
     unit = await add_purifier(hass, "office", "Office", filter_low="on")
     await setup_real_hk(hass)
     entry = await setup_glue(hass)
-    await set_stock(hass, await our_asset(hass, "spares"), 2)
+    counted = await our_asset(hass, "spares")
+    await set_stock(hass, counted, 2)
 
-    # What the glue made and the options no longer want is deleted, not left behind.
+    # Retired as on uninstall: counted stock is handed over, the rest is deleted.
     hass.config_entries.async_update_entry(
         entry,
         options={"prefilter_enabled": False, "appliances_enabled": False, "stock_enabled": False},
@@ -382,20 +383,35 @@ async def test_options_off_clean_up_and_on_again_rebuild(hass: HomeAssistant, pr
     await settle(hass)
     assert await our_task(hass, unit, "prefilter") is None
     assert await our_asset(hass, "purifier", unit.device.id) is None
-    assert await our_asset(hass, "spares") is None
+    kept = await our_asset(hass, "spares")
+    assert kept["id"] == counted["id"]
+    assert kept["managed_by"] is None
+    assert kept["parts"][0]["stock"] == 2
     task = await our_task(hass, unit, "filter")
     assert not task["source"].get("parts")
     assert task["next_due"]  # the filter task itself stays
 
-    # Switched on again: built anew, the filter task linked to the new stock.
+    # Switched on again: a new managed stock; the handed-over one stays the user's.
     hass.config_entries.async_update_entry(entry, options={})
     await settle(hass)
     assert await our_task(hass, unit, "prefilter") is not None
     assert await our_asset(hass, "purifier", unit.device.id) is not None
-    spares = await our_asset(hass, "spares")
-    assert spares["parts"][0].get("stock") is None
+    managed = [a for a in await assets(hass) if ours(a).get("role") == "spares" and a["managed_by"]]
+    assert len(managed) == 1
+    assert managed[0]["id"] != counted["id"]
     task = await our_task(hass, unit, "filter")
-    assert task["source"]["parts"][0]["asset_id"] == spares["id"]
+    assert [link["asset_id"] for link in task["source"]["parts"]] == [managed[0]["id"]]
+    still = next(a for a in await assets(hass) if a["id"] == counted["id"])
+    assert still["managed_by"] is None
+
+
+async def test_stock_off_without_count_deletes_it(hass: HomeAssistant, presses) -> None:
+    await add_purifier(hass, "office", "Office", filter_low="on")
+    await setup_real_hk(hass)
+    entry = await setup_glue(hass)
+    hass.config_entries.async_update_entry(entry, options={"stock_enabled": False})
+    await settle(hass)
+    assert await our_asset(hass, "spares") is None
 
 
 async def test_removal_keeps_counted_stock_for_the_user(hass: HomeAssistant, presses) -> None:

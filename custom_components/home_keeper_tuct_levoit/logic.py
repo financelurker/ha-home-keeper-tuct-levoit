@@ -143,6 +143,13 @@ class UpdateManagedAsset:
 
 
 @dataclass(frozen=True, slots=True)
+class ReleaseAsset:
+    """``update_asset`` with ``managed_by: None``: hand an appliance over to the user."""
+
+    asset_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class DeleteAsset:
     """``delete_asset`` with force."""
 
@@ -166,6 +173,7 @@ type Action = (
     | PressReset
     | EnsureAsset
     | UpdateManagedAsset
+    | ReleaseAsset
     | DeleteAsset
     | LinkParts
 )
@@ -195,8 +203,30 @@ def our_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def our_assets(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return the appliances this glue made."""
-    return [a for a in assets if ns(a) is not None]
+    """Return the appliances this glue made and still manages.
+
+    One handed over to the user keeps our ``source`` (Home Keeper never changes it) but
+    is theirs now: it is not ours to change, delete or take back.
+    """
+    return [
+        a
+        for a in assets
+        if ns(a) is not None and (a.get("managed_by") or {}).get("integration") == DOMAIN
+    ]
+
+
+def is_counted(asset: dict[str, Any]) -> bool:
+    """Return whether a part of *asset* tracks stock: the user counted something."""
+    return any(p.get("stock") is not None for p in asset.get("parts") or [])
+
+
+def retire(asset: dict[str, Any]) -> ReleaseAsset | DeleteAsset:
+    """Retire an appliance we made (Home Keeper INTEGRATING.md §8, "Uninstall").
+
+    A delete takes the user's stock counts with it, so an appliance with a counted part
+    is handed over (locks off, the user keeps it); one without is deleted.
+    """
+    return ReleaseAsset(asset["id"]) if is_counted(asset) else DeleteAsset(asset["id"])
 
 
 def index(records: list[dict[str, Any]]) -> dict[tuple[str | None, str], dict[str, Any]]:
@@ -534,8 +564,9 @@ def plan_assets(
 ) -> list[Action]:
     """Converge the spare-filter appliance, the purifier appliances and the links.
 
-    Appliances an option switches off are deleted, not handed over: what the glue made
-    and the user does not want is cleaned up.
+    An appliance an option switches off, or whose device is gone, is retired as on
+    uninstall (:func:`retire`): handed over if the user counted stock on it, else
+    deleted. Switched on again, a new one is made; one handed over stays the user's.
     """
     actions: list[Action] = []
     mine = index(our_assets(assets))
@@ -594,7 +625,7 @@ def plan_assets(
         ours = mine.get((p.device_id, ROLE_PURIFIER))
         if not settings.appliances_enabled:
             if ours is not None:
-                actions.append(DeleteAsset(ours["id"]))
+                actions.append(retire(ours))
             continue
         if ours is not None or p.device_id in taken:
             continue
@@ -612,9 +643,9 @@ def plan_assets(
                 }
             )
         )
-    # 4. What we made and the options no longer want goes, after the links above are gone.
+    # 4. What the options no longer want is retired, after the links above are gone.
     if spares is not None and not settings.stock_enabled:
-        actions.append(DeleteAsset(spares["id"]))
+        actions.append(retire(spares))
     for (device_id, role), asset in mine.items():
         if (
             role == ROLE_PURIFIER
@@ -622,5 +653,5 @@ def plan_assets(
             and device_id not in by_device
             and device_id not in known_device_ids
         ):
-            actions.append(DeleteAsset(asset["id"]))
+            actions.append(retire(asset))
     return actions

@@ -41,22 +41,23 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 
 Everything it creates is marked as managed by *tuct/levoit* and protected against accidental deletion.
 
-### Switching an option off
+### Switching an option off or removing the integration
 
-What the integration created and an option no longer needs is **deleted**, not left behind:
+Both follow Home Keeper's [guidance for companion integrations](https://github.com/prestomation/ha-home-keeper/blob/main/docs/INTEGRATING.md) (§8, *Uninstall*): what the integration created and no longer needs is cleaned up, except what you counted.
 
-- **Spare-filter stock off:** the filter tasks are unlinked from the stock, then *Levoit spare filters* is deleted, including the counts entered there.
-- **Purifier appliances off:** the appliances on the device pages are deleted.
-- **Pre-filter task off:** the pre-filter tasks are deleted, including their history.
+- **An appliance with a stock count** entered on one of its parts is handed over to you, so the spare filters in the drawer stay counted. Usually that is *Levoit spare filters*; a purifier appliance only if you added counted parts to it. It becomes an ordinary Home Keeper appliance: no longer managed, free to edit or delete.
+- **Every other appliance** it created is deleted.
+- **Tasks** the option covers are deleted, including their history: the pre-filter tasks when the pre-filter task is switched off, every task when the integration is removed.
 
-Switching an option on again creates them anew (counts start empty).
+What each option does:
 
-### Removing the integration
+| Switched off | Effect |
+|---|---|
+| Spare-filter stock | The filter tasks are unlinked from the stock, then *Levoit spare filters* is handed over or deleted as above. |
+| Purifier appliances | The appliances on the device pages are handed over or deleted as above. |
+| Pre-filter task | The pre-filter tasks are deleted. |
 
-Removing the integration deletes all its tasks. Following Home Keeper's [guidance for companion integrations](https://github.com/prestomation/ha-home-keeper/blob/main/docs/INTEGRATING.md), it does **not** delete what you may still want:
-
-- An appliance with a stock count entered on one of its parts stays, so the spare filters in the drawer stay counted. Usually that is *Levoit spare filters*; a purifier appliance only if you added counted parts to it. It is handed over to you as an ordinary Home Keeper appliance: no longer managed, free to edit or delete.
-- Every other appliance it created is deleted.
+Switching an option on again creates what it covers anew. An appliance handed over to you stays yours and is not taken back: with a counted *Levoit spare filters* handed over, you then have two of them, the new managed one and yours to delete.
 
 ## Releases
 

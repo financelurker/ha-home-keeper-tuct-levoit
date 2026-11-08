@@ -76,10 +76,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: LevoitGlueConfigEntry) 
             HK_DOMAIN, HK_SERVICE_LIST_ASSETS, {}, blocking=True, return_response=True
         )
         for asset in logic.our_assets(list((resp or {}).get("assets", []))):
-            # INTEGRATING.md §8, "Uninstall": a delete would take the user's stock counts
-            # with it, so an appliance with a counted part is handed over (locks off,
-            # the user keeps it); one without is deleted.
-            if any(p.get("stock") is not None for p in asset.get("parts") or []):
+            # The same rule as an option switched off (INTEGRATING.md §8, "Uninstall").
+            if isinstance(logic.retire(asset), logic.ReleaseAsset):
                 await services.async_call(
                     HK_DOMAIN,
                     HK_SERVICE_UPDATE_ASSET,
