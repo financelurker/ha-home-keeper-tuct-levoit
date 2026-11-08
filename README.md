@@ -6,7 +6,7 @@ Keeps the filters of Levoit air purifiers running the [tuct/levoit](https://gith
 
 It is a small *glue* integration in the sense of Home Keeper's [glue pattern](https://github.com/prestomation/ha-home-keeper/blob/main/docs/GLUE_INTEGRATIONS.md): it changes neither the purifier firmware nor Home Keeper and talks to both only through the registries, entity states, services and events.
 
-> **Work in progress.** This version sets up the integration only; the purifier handling, the options and the ESPHome configuration guide follow in the next releases.
+> **Work in progress.** The options page and the ESPHome configuration guide follow in the next releases; until then the defaults below apply.
 
 ## Installation
 
@@ -29,6 +29,36 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 ## Setup
 
 **Settings → Devices & services → Add integration → Home Keeper — tuct/levoit air purifiers.** One instance covers every purifier.
+
+## What it creates in Home Keeper
+
+| | Created | Content |
+|---|---|---|
+| **Replace filter (‹purifier›)** | per purifier, on its first **Filter Low** | Raised by **Filter Low**, cleared when the purifier reports the filter fine again. Ticking it off presses the purifier's **Filter Reset** button. |
+| **Clean pre-filter (‹purifier›)** | per purifier | Every 300 h of fan runtime or 4 weeks, whichever comes first, with a **Fan Runtime** sensor; every 4 weeks without one. |
+| **Levoit spare filters** | once for the home | One counted part per filter type. Every filter replacement takes one off the stock, so one buy task covers all purifiers. |
+| **Purifier appliance** | per purifier, unless its device page has one | Model details on the purifier's device page. |
+
+Everything it creates is marked as managed by *tuct/levoit* and protected against accidental deletion.
+
+### Switching an option off
+
+What the integration created and an option no longer needs is **deleted**, not left behind:
+
+- **Spare-filter stock off:** the filter tasks are unlinked from the stock, then *Levoit spare filters* is deleted, including the counts entered there.
+- **Purifier appliances off:** the appliances on the device pages are deleted.
+- **Pre-filter task off:** the pre-filter tasks are deleted, including their history.
+
+Switching an option on again creates them anew (counts start empty).
+
+### Removing the integration
+
+Removing the integration deletes all its tasks. Following Home Keeper's [guidance for companion integrations](https://github.com/prestomation/ha-home-keeper/blob/main/docs/INTEGRATING.md), it does **not** delete what you may still want:
+
+- *Levoit spare filters* stays if a stock count was entered, so the spare filters in the drawer stay counted.
+- The purifier appliances on the device pages stay.
+
+Both are handed over to you as ordinary Home Keeper appliances: no longer managed, free to edit or delete. Without a stock count, *Levoit spare filters* is deleted.
 
 ## Releases
 
@@ -54,7 +84,7 @@ ruff check . && ruff format --check .
 pytest
 ```
 
-The tests run in a real Home Assistant test instance (`pytest-homeassistant-custom-component`), against Home Keeper's test fake. They need Home Keeper in `custom_components/home_keeper`; CI copies a pinned release there (see `.github/workflows/validate.yml`), locally those tests are skipped without it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The tests run in a real Home Assistant test instance (`pytest-homeassistant-custom-component`), end to end against the real Home Keeper. They need Home Keeper in `custom_components/home_keeper`; CI copies a pinned release there (see `.github/workflows/validate.yml`), copy it there locally too. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
