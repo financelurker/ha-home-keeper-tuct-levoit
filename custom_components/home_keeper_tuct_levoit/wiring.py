@@ -40,6 +40,7 @@ from .const import (
     HK_DOMAIN,
     HK_EVENT_REGISTER_COMPANIONS,
     HK_EVENT_TASK_COMPLETED,
+    HK_EVENT_TASK_DELETED,
     HK_SERVICE_ADD_ASSET,
     HK_SERVICE_ADD_TASK,
     HK_SERVICE_COMPLETE_TASK,
@@ -156,6 +157,7 @@ class LevoitGlue:
         bus = self.hass.bus
         on_unload = self.entry.async_on_unload
         on_unload(bus.async_listen(HK_EVENT_TASK_COMPLETED, self._on_hk_completed))
+        on_unload(bus.async_listen(HK_EVENT_TASK_DELETED, self._on_hk_deleted))
         on_unload(bus.async_listen(HK_EVENT_REGISTER_COMPANIONS, self._on_register_request))
         on_unload(bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_registry_updated))
         on_unload(bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, self._on_registry_updated))
@@ -329,6 +331,16 @@ class LevoitGlue:
         # Marks of tasks that are gone are dropped.
         self._deferred_marks &= {t.get("id") for t in tasks}
         return out
+
+    @callback
+    def _on_hk_deleted(self, event: Event) -> None:
+        """One of our tasks was deleted in Home Keeper: reconcile (INTEGRATING.md §5).
+
+        A deleted pre-filter task comes back; a filter task comes back on the next
+        Filter Low. Our own deletions reconcile to nothing.
+        """
+        if logic.ns({"source": event.data.get("source")}) is not None:
+            self._on_registry_updated(event)
 
     # ── reconcile ────────────────────────────────────────────────────────────
     async def async_reconcile(self) -> None:
