@@ -6,8 +6,6 @@ Keeps the filters of Levoit air purifiers running the [tuct/levoit](https://gith
 
 It is a small *glue* integration in the sense of Home Keeper's [glue pattern](https://github.com/prestomation/ha-home-keeper/blob/main/docs/GLUE_INTEGRATIONS.md): it changes neither the purifier firmware nor Home Keeper and talks to both only through the registries, entity states, services and events.
 
-> **Work in progress.** The ESPHome configuration guide follows in a next release.
-
 ## Installation
 
 Requires Home Assistant 2026.10 or newer and Home Keeper 0.36.0 or newer.
@@ -29,6 +27,75 @@ Without the button: HACS → ⋮ → **Custom repositories** → add `https://gi
 ## Setup
 
 **Settings → Devices & services → Add integration → Home Keeper — tuct/levoit air purifiers.** One instance covers every purifier.
+
+## ESPHome configuration
+
+The integration needs three things from a purifier's ESPHome YAML. tuct's example configurations have the entities, but **not the project name**, so add that first.
+
+### 1. Project name (required)
+
+The integration finds a purifier by its ESPHome project name. Add a `project` block under `esphome:`:
+
+```yaml
+esphome:
+  name: ${device_name}
+  project:
+    name: tuct.levoit-vital100s   # see the table below
+    version: "1.0"                # any text; Home Assistant shows it as the firmware version
+```
+
+| Purifier | `project: name:` |
+|---|---|
+| Core 200S | `tuct.levoit-core200s` |
+| Core 300S | `tuct.levoit-core300s` |
+| Core 400S | `tuct.levoit-core400s` |
+| Core 600S | `tuct.levoit-core600s` |
+| Vital 100S | `tuct.levoit-vital100s` |
+| Vital 200S | `tuct.levoit-vital200s` |
+| Vital 200S Pro | `tuct.levoit-vital200s-pro` |
+| EverestAir | `tuct.levoit-everest-air` |
+| Sprout | `tuct.levoit-sprout` |
+
+Home Assistant splits the name at the dot: the device page then shows manufacturer **tuct** and model **levoit-vital100s**. That is what the integration looks for. Only devices of the ESPHome integration count, so nothing else in your home is picked up by accident. Flash the device, and the integration finds it within seconds, no reload needed.
+
+### 2. Filter entities (in tuct's configurations already)
+
+| Entity | In tuct's YAML | Used for |
+|---|---|---|
+| `binary_sensor` *Filter Low* (required) | `type: filter_low` | Raises *Replace filter*. |
+| `button` *Filter Reset* | `type: reset_filter_stats` | Pressed when you tick off *Replace filter*. Without it, the task asks you to press it yourself. |
+| `number` *Filter Months* | `type: filter_lifetime_months` | Not read by the integration, but it sets after how many months of use the purifier reports *Filter Low*. |
+
+The integration matches them by their `name:` in the YAML, else by the end of the entity ID. If you renamed one (say *Swap Filter*), assign it under **Configure → Devices and entities**.
+
+### 3. Fan runtime (optional)
+
+With a *Fan Runtime* sensor, *Clean pre-filter* is due after 300 hours of fan time (or at the latest after 4 weeks) instead of every 4 weeks. tuct's firmware has no such sensor, but ESPHome's [`duty_time`](https://esphome.io/components/sensor/duty_time/) sensor counts the hours the fan runs. Add it to the `sensor:` list:
+
+```yaml
+sensor:
+  - platform: duty_time
+    name: "Fan Runtime"
+    id: fan_runtime
+    lambda: "return id(levoit_fan1).state;"   # the fan's id in tuct's configurations
+    restore: true                             # keep the count across reboots
+    unit_of_measurement: h
+    device_class: duration
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.000277778                 # duty_time counts seconds; this makes hours
+```
+
+Good to know:
+
+- It counts every fan speed the same: an hour on sleep counts as much as an hour on turbo.
+- `restore: true` writes the count to flash now and then. ESPHome warns that this wears the flash over the years. Without it, the count starts at 0 after every reboot: Home Keeper notices and counts on from 0, so the hours before the reboot are lost and the pre-filter comes due later.
+- Without the sensor, the integration uses the weeks only. Add the sensor later and the same task switches to fan hours.
+
+### Not found?
+
+Turn on debug logging (see [Troubleshooting](#troubleshooting)). When no purifier is found, the log says so and names the manufacturer and model it looks for. Check the device page: it must show manufacturer **tuct** and a model starting with **levoit**.
 
 ## Options
 

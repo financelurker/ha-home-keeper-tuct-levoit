@@ -426,3 +426,9 @@ def test_filter_name_from_the_options_wins() -> None:
     assert p.filter_part == "Vital 100S-RF-PA"
     (create,) = logic.plan_filter(None, _p(filter="X", filter_low=True), S)
     assert "**X**" in create.payload["notes"]
+
+
+def test_without_a_reset_button_the_task_asks_for_a_manual_reset() -> None:
+    (create,) = logic.plan_filter(None, _p(filter_low=True, reset_entity=None), S)
+    assert "completion_prompt" not in create.payload["managed_by"]
+    assert "press **Filter Reset**" in create.payload["notes"]
