@@ -24,6 +24,7 @@ ORIGIN = DOMAIN
 #   rule           the pre-filter schedule we last wrote
 ROLE_FILTER = "filter"
 ROLE_PREFILTER = "prefilter"
+ROLE_SENSOR = "sensor"
 ROLE_PURIFIER = "purifier"
 ROLE_SPARES = "spares"
 MARK_PAUSED = "paused"
@@ -77,6 +78,7 @@ OPT_RESET_ON_DONE = "reset_on_done"
 OPT_PREFILTER_ENABLED = "prefilter_enabled"
 OPT_PREFILTER_HOURS = "prefilter_hours"
 OPT_PREFILTER_WEEKS = "prefilter_weeks"
+OPT_SENSOR_ENABLED = "sensor_enabled"
 # {model key: filter name}: the filter every purifier of that model takes.
 OPT_FILTER_NAMES = "filter_names"
 # {device id: filter name}: a purifier that takes a filter of its own.
@@ -93,6 +95,7 @@ DEFAULT_PREFILTER_ENABLED = True
 # 4 weeks at 10 h a day; the calendar backstop catches a purifier that idles.
 DEFAULT_PREFILTER_HOURS = 300
 DEFAULT_PREFILTER_WEEKS = 4
+DEFAULT_SENSOR_ENABLED = True
 
 # ── Managed ownership ────────────────────────────────────────────────────────
 MANAGED_DISPLAY_NAME = "tuct/levoit"
@@ -104,6 +107,7 @@ DOCS_URL = "https://github.com/financelurker/ha-home-keeper-tuct-levoit"
 # pre-filter schedule stays unlocked (it follows the runtime sensor and the options).
 FILTER_LOCKED_FIELDS = ["device_id", "recurrence_type"]
 PREFILTER_LOCKED_FIELDS = ["device_id"]
+SENSOR_LOCKED_FIELDS = ["device_id"]
 SPARES_LOCKED_FIELDS = ["parts"]
 PART_TYPE_CONSUMABLE = "consumable"
 # The filter fitted in a purifier, on its device page: a wear part without a
@@ -131,6 +135,20 @@ TEXT: dict[str, dict[str, str]] = {
         "whichever comes first.",
         "due_calendar": "Due every {weeks} weeks. Add a `Fan Runtime` sensor to the "
         "ESPHome config to count fan hours instead.",
+        "sensor_name": "Clean dust sensor ({device})",
+        "sensor_infrared": (
+            "Unplug the purifier and open the dust sensor cover. Clean the air inlet, the "
+            "air outlet and the sensor lens with a moistened cotton swab, then repeat "
+            "with a dry one. Leave the foam on the cover in place."
+        ),
+        "sensor_laser": (
+            "Unplug the purifier. Hold a vacuum cleaner to the sensor openings for at "
+            "least 10 seconds."
+        ),
+        "sensor_due": (
+            "Due every {months} months; more often in a dusty home or when the air "
+            "quality shows bad all the time."
+        ),
         "spares_name": "Levoit spare filters",
         "spares_notes": (
             "Created by the tuct/levoit companion: one shared stock of replacement "
@@ -181,6 +199,21 @@ TEXT: dict[str, dict[str, str]] = {
         "nachdem, was zuerst eintritt.",
         "due_calendar": "Fällig alle {weeks} Wochen. Mit einem `Fan Runtime`-Sensor in der "
         "ESPHome-Config wird stattdessen nach Lüfterstunden gezählt.",
+        "sensor_name": "Staubsensor reinigen ({device})",
+        "sensor_infrared": (
+            "Luftreiniger ausstecken und die Abdeckung des Staubsensors öffnen. "
+            "Lufteinlass, Luftauslass und Sensorlinse mit einem befeuchteten "
+            "Wattestäbchen reinigen, dann mit einem trockenen nachwischen. Den "
+            "Schaumstoff an der Abdeckung nicht entfernen."
+        ),
+        "sensor_laser": (
+            "Luftreiniger ausstecken. Einen Staubsauger mindestens 10 Sekunden an die "
+            "Sensoröffnungen halten."
+        ),
+        "sensor_due": (
+            "Fällig alle {months} Monate; öfter bei viel Staub oder wenn die "
+            "Luftqualität dauernd schlecht anzeigt."
+        ),
         "spares_name": "Levoit-Ersatzfilter",
         "spares_notes": (
             "Von der tuct/levoit-Companion angelegt: ein gemeinsamer Vorrat an "

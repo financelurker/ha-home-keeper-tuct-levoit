@@ -34,6 +34,7 @@ from .const import (
     DEFAULT_PREFILTER_HOURS,
     DEFAULT_PREFILTER_WEEKS,
     DEFAULT_RESET_ON_DONE,
+    DEFAULT_SENSOR_ENABLED,
     DEFAULT_STOCK_ENABLED,
     DOCS_URL,
     DOMAIN,
@@ -66,6 +67,7 @@ from .const import (
     OPT_PREFILTER_HOURS,
     OPT_PREFILTER_WEEKS,
     OPT_RESET_ON_DONE,
+    OPT_SENSOR_ENABLED,
     OPT_STOCK_ENABLED,
     ORIGIN,
     PROJECT_MANUFACTURER,
@@ -156,6 +158,7 @@ class LevoitGlue:
             prefilter_enabled=bool(opts.get(OPT_PREFILTER_ENABLED, DEFAULT_PREFILTER_ENABLED)),
             prefilter_hours=int(opts.get(OPT_PREFILTER_HOURS, DEFAULT_PREFILTER_HOURS)),
             prefilter_weeks=int(opts.get(OPT_PREFILTER_WEEKS, DEFAULT_PREFILTER_WEEKS)),
+            sensor_enabled=bool(opts.get(OPT_SENSOR_ENABLED, DEFAULT_SENSOR_ENABLED)),
         )
 
     # ── lifecycle ────────────────────────────────────────────────────────────

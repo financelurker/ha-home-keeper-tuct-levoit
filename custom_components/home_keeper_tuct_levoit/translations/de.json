@@ -21,7 +21,7 @@
           "devices": "Geräte und Entitäten"
         },
         "menu_option_descriptions": {
-          "general": "Ersatzfilter-Vorrat, Geräteeinträge, Reset beim Abhaken, Vorfilter-Intervall",
+          "general": "Ersatzfilter-Vorrat, Geräteeinträge, Reset beim Abhaken, Vorfilter- und Staubsensor-Tasks",
           "filters": "Filtername pro Modell oder pro Gerät, z. B. eine Pet-Allergy-Variante",
           "devices": "Erkannte Entitäten prüfen oder von Hand zuordnen"
         }
@@ -33,6 +33,7 @@
           "appliances_enabled": "Geräteeinträge an den Luftreinigern",
           "reset_on_done": "Filterstatistik beim Abhaken zurücksetzen",
           "prefilter_enabled": "Task „Vorfilter reinigen“",
+          "sensor_enabled": "Task „Staubsensor reinigen“",
           "prefilter_hours": "Vorfilter reinigen alle … Lüfterstunden",
           "prefilter_weeks": "Oder spätestens alle … Wochen"
         },
@@ -41,6 +42,7 @@
           "appliances_enabled": "Modell, Notizen und der eingesetzte Filter auf der Geräteseite, nur wo noch kein Eintrag existiert. Aus: gelöscht, oder an dich übergeben, wenn du dort Bestand gezählt hast.",
           "reset_on_done": "Hakst du „Filter tauschen“ in Home Keeper ab, drückt die Integration am Luftreiniger „Filter Reset“.",
           "prefilter_enabled": "Für jeden Luftreiniger. Aus: Die Vorfilter-Tasks werden gelöscht.",
+          "sensor_enabled": "Für jeden Luftreiniger mit Staubsensor: alle 2 Monate (Vital) bzw. 3 Monate (Core 300S/400S/600S, EverestAir). Aus: Diese Tasks werden gelöscht.",
           "prefilter_hours": "Braucht einen „Fan Runtime“-Sensor. Ohne ihn zählen nur die Wochen.",
           "prefilter_weeks": "Levoit empfiehlt alle 2–4 Wochen. Fällig ist, was zuerst eintritt."
         }

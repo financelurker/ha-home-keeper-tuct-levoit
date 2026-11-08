@@ -21,7 +21,7 @@
           "devices": "Devices and entities"
         },
         "menu_option_descriptions": {
-          "general": "Spare-filter stock, appliances, reset on done, pre-filter interval",
+          "general": "Spare-filter stock, appliances, reset on done, pre-filter and dust-sensor tasks",
           "filters": "Filter name per model or per device, e.g. a Pet Allergy variant",
           "devices": "Check the detected entities or assign them by hand"
         }
@@ -33,6 +33,7 @@
           "appliances_enabled": "Appliances on the purifiers",
           "reset_on_done": "Reset filter statistics on done",
           "prefilter_enabled": "“Clean pre-filter” task",
+          "sensor_enabled": "“Clean dust sensor” task",
           "prefilter_hours": "Clean pre-filter every … fan hours",
           "prefilter_weeks": "Or at the latest every … weeks"
         },
@@ -41,6 +42,7 @@
           "appliances_enabled": "Model, notes and the fitted filter on the device page, only where no appliance exists yet. Off: deleted, or handed over to you if you counted stock on them.",
           "reset_on_done": "When you tick off “Replace filter” in Home Keeper, the integration presses “Filter Reset” on the purifier.",
           "prefilter_enabled": "For every purifier. Off: the pre-filter tasks are deleted.",
+          "sensor_enabled": "For every purifier with a dust sensor: every 2 months (Vital) or 3 months (Core 300S/400S/600S, EverestAir). Off: these tasks are deleted.",
           "prefilter_hours": "Needs a “Fan Runtime” sensor. Without one, only the weeks count.",
           "prefilter_weeks": "Levoit recommends every 2–4 weeks. Whichever comes first is due."
         }

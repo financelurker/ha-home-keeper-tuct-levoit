@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from .catalog import WASH, LevoitModel
+from .catalog import SENSOR_MONTHS, WASH, LevoitModel
 from .const import (
     DOMAIN,
     FILTER_LOCKED_FIELDS,
@@ -42,7 +42,9 @@ from .const import (
     ROLE_FILTER,
     ROLE_PREFILTER,
     ROLE_PURIFIER,
+    ROLE_SENSOR,
     ROLE_SPARES,
+    SENSOR_LOCKED_FIELDS,
     SOURCE_NS,
     SPARES_LOCKED_FIELDS,
     TEXT,
@@ -87,6 +89,7 @@ class Settings:
     prefilter_enabled: bool = True
     prefilter_hours: int = 300
     prefilter_weeks: int = 4
+    sensor_enabled: bool = True
 
 
 # ── actions ──────────────────────────────────────────────────────────────────
@@ -523,6 +526,66 @@ def plan_prefilter(
     return [a] if (a := edit.action()) else []
 
 
+# ── dust-sensor task ─────────────────────────────────────────────────────────
+
+
+def plan_sensor(
+    task: dict[str, Any] | None,
+    purifier: Purifier,
+    settings: Settings,
+    *,
+    now: datetime,
+) -> list[Action]:
+    """Keep the dust-sensor cleaning task of a purifier whose model has a sensor.
+
+    Calendar-based, as Levoit gives no runtime for it. The interval is written when the
+    task is made and when the language changes the notes; one the user set on the task
+    otherwise stays.
+    """
+    kind = purifier.model.sensor
+    if not settings.sensor_enabled or kind is None:
+        return [DeleteTask(task["id"])] if task is not None else []
+    months = SENSOR_MONTHS[kind]
+    rule = f"{kind}:{months}:{settings.lang}"
+    notes = f"{_t(settings, 'sensor_' + kind)} {_t(settings, 'sensor_due', months=months)}"
+    fields: dict[str, Any] = {
+        "recurrence_type": "floating",
+        "interval": months,
+        "unit": "months",
+        "notes": notes,
+    }
+    if task is None:
+        if purifier.paused:
+            return []
+        name = _t(settings, "sensor_name", device=purifier.name)
+        return [
+            CreateTask(
+                {
+                    "name": name,
+                    **fields,
+                    "last_completed": now.isoformat(),  # start counting today
+                    "device_id": purifier.device_id,
+                    "managed_by": _managed_by(settings, SENSOR_LOCKED_FIELDS),
+                    "source": {
+                        SOURCE_NS: {
+                            "device_id": purifier.device_id,
+                            "role": ROLE_SENSOR,
+                            "name": name,
+                            "rule": rule,
+                        }
+                    },
+                }
+            )
+        ]
+    edit = _TaskEdit(task)
+    if _resume_or_pause(edit, purifier):
+        _rename(edit, _t(settings, "sensor_name", device=purifier.name))
+        if edit.src.get("rule") != rule:
+            edit.data.update(fields)
+            edit.set_src({**edit.src, "rule": rule})
+    return [a] if (a := edit.action()) else []
+
+
 # ── reconcile: tasks ─────────────────────────────────────────────────────────
 
 
@@ -552,6 +615,7 @@ def plan_reconcile(
             retry_reset=p.device_id not in pressed,
         )
         actions += plan_prefilter(idx.get((p.device_id, ROLE_PREFILTER)), p, settings, now=now)
+        actions += plan_sensor(idx.get((p.device_id, ROLE_SENSOR)), p, settings, now=now)
     for (device_id, _role), task in idx.items():
         if device_id not in by_device and device_id not in known_device_ids:
             actions.append(DeleteTask(task["id"]))

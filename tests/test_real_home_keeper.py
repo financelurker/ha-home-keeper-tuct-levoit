@@ -146,7 +146,7 @@ async def test_device_page_shows_the_fitted_filter_and_its_last_change(
     assert fitted["stock"] is None
     assert fitted["last_replaced"] is None
     # A wear part without an interval derives no task of its own.
-    assert len([t for t in await tasks(hass) if ours(t)]) == 2
+    assert not [t for t in await tasks(hass) if (t.get("source") or {}).get("part")]
 
     task = await our_task(hass, unit, "filter")
     await hk(hass, "complete_task", {"task_id": task["id"]})
@@ -539,7 +539,7 @@ async def test_removed_device_takes_its_tasks(hass: HomeAssistant, presses) -> N
 
     dr.async_get(hass).async_remove_device(unit.device.id)
     await settle(hass)
-    assert [ours(t)["device_id"] for t in await tasks(hass) if ours(t)] == [keep.device.id]
+    assert {ours(t)["device_id"] for t in await tasks(hass) if ours(t)} == {keep.device.id}
     assert await our_asset(hass, "purifier", unit.device.id) is None
     spares = await our_asset(hass, "spares")
     assert spares["parts"][0]["notes"] == "Verwendet von: Bedroom"
@@ -566,3 +566,44 @@ async def test_late_home_keeper_catches_up(hass: HomeAssistant, presses) -> None
     await settle(hass)
     assert (await our_task(hass, unit, "filter"))["next_due"]
     assert await our_asset(hass, "spares") is not None
+
+
+async def test_dust_sensor_task_per_model(hass: HomeAssistant, presses) -> None:
+    vital = await add_purifier(hass, "office", "Office")
+    core = await add_purifier(hass, "bedroom", "Bedroom", model="levoit-core300s")
+    small = await add_purifier(hass, "hall", "Hall", model="levoit-core200s")
+    sprout = await add_purifier(hass, "kids", "Kids", model="levoit-sprout")
+    await setup_real_hk(hass)
+    entry = await setup_glue(hass)
+
+    task = await our_task(hass, vital, "sensor")
+    assert task["name"] == "Staubsensor reinigen (Office)"
+    assert (task["recurrence_type"], task["interval"], task["unit"]) == ("floating", 2, "months")
+    assert "Wattestäbchen" in task["notes"]
+    assert "Schaumstoff" in task["notes"]
+    assert dt_util.parse_datetime(task["next_due"]) > dt_util.now() + timedelta(days=55)
+
+    task = await our_task(hass, core, "sensor")
+    assert (task["interval"], task["unit"]) == (3, "months")
+    assert "Staubsauger" in task["notes"]
+
+    # No sensor (Core 200S), or no Levoit instruction found (Sprout): no task.
+    assert await our_task(hass, small, "sensor") is None
+    assert await our_task(hass, sprout, "sensor") is None
+
+    # An interval the user set on the task stays.
+    await hk(
+        hass,
+        "update_task",
+        {"task_id": (await our_task(hass, vital, "sensor"))["id"], "interval": 1},
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    assert (await our_task(hass, vital, "sensor"))["interval"] == 1
+
+    # Switched off: deleted.
+    hass.config_entries.async_update_entry(entry, options={"sensor_enabled": False})
+    await settle(hass)
+    assert await our_task(hass, vital, "sensor") is None
+    assert await our_task(hass, core, "sensor") is None
+    assert await our_task(hass, vital, "prefilter") is not None
