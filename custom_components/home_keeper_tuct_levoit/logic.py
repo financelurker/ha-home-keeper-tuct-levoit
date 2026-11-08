@@ -23,12 +23,14 @@ How a purifier's filter task moves:
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .catalog import SENSOR_MONTHS, WASH, LevoitModel
 from .const import (
+    CALENDAR_LOCKED_FIELDS,
     DOMAIN,
     FILTER_LOCKED_FIELDS,
     HK_SOURCE_PARTS,
@@ -38,13 +40,11 @@ from .const import (
     MARK_PENDING,
     PART_TYPE_CONSUMABLE,
     PART_TYPE_WEAR,
-    PREFILTER_LOCKED_FIELDS,
     ROLE_FILTER,
     ROLE_PREFILTER,
     ROLE_PURIFIER,
     ROLE_SENSOR,
     ROLE_SPARES,
-    SENSOR_LOCKED_FIELDS,
     SOURCE_NS,
     SPARES_LOCKED_FIELDS,
     TEXT,
@@ -107,6 +107,14 @@ class CreateTask:
 
     payload: dict[str, Any]
     dormant: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SkipTask:
+    """``skip_task``: back to waiting, without a completion."""
+
+    task_id: str
+    note: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +194,7 @@ class LinkParts:
 type Action = (
     CreateTask
     | ArmTask
+    | SkipTask
     | ClearTask
     | UpdateTask
     | DeleteTask
@@ -495,34 +504,127 @@ def plan_user_completion(
 # ── pre-filter task ──────────────────────────────────────────────────────────
 
 
-def _prefilter_rule(purifier: Purifier, settings: Settings) -> tuple[str, dict[str, Any]]:
-    """Return the rule key and the schedule fields of the pre-filter task."""
-    weeks = settings.prefilter_weeks
-    how = _t(settings, "how_wash" if purifier.model.prefilter == WASH else "how_vacuum")
-    if purifier.runtime_entity:
-        hours = settings.prefilter_hours
-        key = f"runtime:{purifier.runtime_entity}:{hours}:{weeks}:{settings.lang}"
-        fields: dict[str, Any] = {
-            "recurrence_type": "sensor",
-            "sensor": {
-                "entity_id": purifier.runtime_entity,
-                "mode": "usage",
-                "target": hours,
-                "unit": "h",
-                "also_every": {"interval": weeks, "unit": "weeks"},
-                "combinator": "any",
-            },
-            "notes": f"{how} {_t(settings, 'due_runtime', hours=hours, weeks=weeks)}",
-        }
-    else:
-        key = f"calendar:{weeks}:{settings.lang}"
-        fields = {
-            "recurrence_type": "floating",
-            "interval": weeks,
-            "unit": "weeks",
-            "notes": f"{how} {_t(settings, 'due_calendar', weeks=weeks)}",
-        }
-    return key, fields
+# ── calendar tasks the glue arms ─────────────────────────────────────────────
+#
+# Home Keeper puts every calendar (floating) task on its to-do list with its next date,
+# months ahead. The pre-filter task without a runtime sensor and the dust-sensor task
+# are therefore triggered tasks: dormant, off the to-do list, and armed by the glue once
+# their interval has passed since the last decision about them (the later of the last
+# completion and the last skip, as Home Keeper counts a usage task's time backstop).
+# A chip shows the date they come due.
+
+
+def add_interval(anchor: datetime, interval: int, unit: str) -> datetime:
+    """Return *anchor* plus *interval* weeks or months (a month end clamps)."""
+    if unit == "weeks":
+        return anchor + timedelta(weeks=interval)
+    month = anchor.month - 1 + interval
+    year, month = anchor.year + month // 12, month % 12 + 1
+    day = min(anchor.day, calendar.monthrange(year, month)[1])
+    return anchor.replace(year=year, month=month, day=day)
+
+
+def _parse_ts(raw: Any) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        when = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def last_decision(task: dict[str, Any]) -> datetime | None:
+    """Return the later of the task's last completion and last skip."""
+    stamps = [
+        when
+        for raw in (
+            task.get("last_completed"),
+            *(entry.get("ts") for entry in task.get("skips") or []),
+        )
+        if (when := _parse_ts(raw)) is not None
+    ]
+    return max(stamps) if stamps else _parse_ts(task.get("created"))
+
+
+def _due_chip(due: datetime, settings: Settings) -> dict[str, str]:
+    date = (
+        f"{due.day:02d}.{due.month:02d}.{due.year}"
+        if settings.lang == "de"
+        else due.date().isoformat()
+    )
+    return {"label": _t(settings, "due_chip", date=date), "icon": "mdi:calendar-clock"}
+
+
+def plan_calendar(
+    task: dict[str, Any] | None,
+    purifier: Purifier,
+    settings: Settings,
+    *,
+    role: str,
+    name: str,
+    notes: str,
+    interval: int,
+    unit: str,
+    rule: str,
+    now: datetime,
+) -> list[Action]:
+    """Keep a calendar task the glue arms itself: dormant until *interval* has passed."""
+    if task is None:
+        if purifier.paused:
+            return []
+        due = add_interval(now, interval, unit)
+        return [
+            CreateTask(
+                {
+                    "name": name,
+                    "notes": notes,
+                    "recurrence_type": "triggered",
+                    "device_id": purifier.device_id,
+                    "task_chips": [_due_chip(due, settings)],
+                    "managed_by": _managed_by(settings, CALENDAR_LOCKED_FIELDS),
+                    "source": {
+                        SOURCE_NS: {
+                            "device_id": purifier.device_id,
+                            "role": role,
+                            "name": name,
+                            "rule": rule,
+                        }
+                    },
+                },
+                dormant=True,
+            )
+        ]
+    edit = _TaskEdit(task)
+    if not _resume_or_pause(edit, purifier):
+        return [a] if (a := edit.action()) else []
+    _rename(edit, name)
+    if edit.src.get("rule") != rule:
+        edit.data["notes"] = notes
+        edit.set_src({**edit.src, "rule": rule})
+    after: list[Action] = []
+    converted = task.get("recurrence_type") != "triggered"
+    if converted:
+        # A calendar task of an earlier version, or the pre-filter task losing its
+        # runtime sensor: from now on the glue arms it.
+        edit.data["recurrence_type"] = "triggered"
+    anchor = last_decision(task) or now
+    due = add_interval(anchor, interval, unit)
+    chips = [_due_chip(due, settings)]
+    if _chips_of(task) != chips:
+        edit.data["task_chips"] = chips
+    if due <= now:
+        if converted or not is_armed(task):
+            after.append(ArmTask(task["id"]))
+    elif converted or is_armed(task):
+        # Converting arms a triggered task in Home Keeper; so would an interval made
+        # longer in the options. A skip puts it back to waiting without a completion.
+        after.append(SkipTask(task["id"], _t(settings, "calendar_skip_note")))
+    first = edit.action()
+    return ([first] if first else []) + after
+
+
+# ── pre-filter task ──────────────────────────────────────────────────────────
 
 
 def plan_prefilter(
@@ -532,36 +634,71 @@ def plan_prefilter(
     *,
     now: datetime,
 ) -> list[Action]:
-    """Keep the pre-filter task: by fan runtime when the sensor exists, else by weeks."""
+    """Keep the pre-filter task.
+
+    A meter on fan runtime when the sensor exists (Home Keeper arms it), else a
+    calendar task the glue arms.
+    """
     if not settings.prefilter_enabled:
         return [DeleteTask(task["id"])] if task is not None else []
-    rule, fields = _prefilter_rule(purifier, settings)
+    weeks = settings.prefilter_weeks
+    how = _t(settings, "how_wash" if purifier.model.prefilter == WASH else "how_vacuum")
+    name = _t(settings, "prefilter_name", device=purifier.name)
+    if not purifier.runtime_entity:
+        return plan_calendar(
+            task,
+            purifier,
+            settings,
+            role=ROLE_PREFILTER,
+            name=name,
+            notes=f"{how} {_t(settings, 'due_calendar', weeks=weeks)}",
+            interval=weeks,
+            unit="weeks",
+            rule=f"calendar:{weeks}:{settings.lang}",
+            now=now,
+        )
+    hours = settings.prefilter_hours
+    rule = f"runtime:{purifier.runtime_entity}:{hours}:{weeks}:{settings.lang}"
+    fields: dict[str, Any] = {
+        "recurrence_type": "sensor",
+        "sensor": {
+            "entity_id": purifier.runtime_entity,
+            "mode": "usage",
+            "target": hours,
+            "unit": "h",
+            "also_every": {"interval": weeks, "unit": "weeks"},
+            "combinator": "any",
+        },
+        "notes": f"{how} {_t(settings, 'due_runtime', hours=hours, weeks=weeks)}",
+    }
     if task is None:
         if purifier.paused:
             return []
-        name = _t(settings, "prefilter_name", device=purifier.name)
-        payload: dict[str, Any] = {
-            "name": name,
-            **fields,
-            "device_id": purifier.device_id,
-            "managed_by": _managed_by(settings, PREFILTER_LOCKED_FIELDS),
-            "source": {
-                SOURCE_NS: {
-                    "device_id": purifier.device_id,
-                    "role": ROLE_PREFILTER,
+        return [
+            CreateTask(
+                {
                     "name": name,
-                    "rule": rule,
+                    **fields,
+                    "device_id": purifier.device_id,
+                    "managed_by": _managed_by(settings, CALENDAR_LOCKED_FIELDS),
+                    "source": {
+                        SOURCE_NS: {
+                            "device_id": purifier.device_id,
+                            "role": ROLE_PREFILTER,
+                            "name": name,
+                            "rule": rule,
+                        }
+                    },
                 }
-            },
-        }
-        if fields["recurrence_type"] == "floating":
-            payload["last_completed"] = now.isoformat()  # start counting today
-        return [CreateTask(payload)]
+            )
+        ]
     edit = _TaskEdit(task)
     if _resume_or_pause(edit, purifier):
-        _rename(edit, _t(settings, "prefilter_name", device=purifier.name))
+        _rename(edit, name)
         if edit.src.get("rule") != rule:
             edit.data.update(fields)
+            if task.get("task_chips"):
+                edit.data["task_chips"] = []  # the meter shows its own countdown
             edit.set_src({**edit.src, "rule": rule})
     return [a] if (a := edit.action()) else []
 
@@ -578,52 +715,24 @@ def plan_sensor(
 ) -> list[Action]:
     """Keep the dust-sensor cleaning task of a purifier whose model has a sensor.
 
-    Calendar-based, as Levoit gives no runtime for it. The interval is written when the
-    task is made and when the language changes the notes; one the user set on the task
-    otherwise stays.
+    Levoit gives a calendar interval only, so it is a calendar task the glue arms.
     """
     kind = purifier.model.sensor
     if not settings.sensor_enabled or kind is None:
         return [DeleteTask(task["id"])] if task is not None else []
     months = SENSOR_MONTHS[kind]
-    rule = f"{kind}:{months}:{settings.lang}"
-    notes = f"{_t(settings, 'sensor_' + kind)} {_t(settings, 'sensor_due', months=months)}"
-    fields: dict[str, Any] = {
-        "recurrence_type": "floating",
-        "interval": months,
-        "unit": "months",
-        "notes": notes,
-    }
-    if task is None:
-        if purifier.paused:
-            return []
-        name = _t(settings, "sensor_name", device=purifier.name)
-        return [
-            CreateTask(
-                {
-                    "name": name,
-                    **fields,
-                    "last_completed": now.isoformat(),  # start counting today
-                    "device_id": purifier.device_id,
-                    "managed_by": _managed_by(settings, SENSOR_LOCKED_FIELDS),
-                    "source": {
-                        SOURCE_NS: {
-                            "device_id": purifier.device_id,
-                            "role": ROLE_SENSOR,
-                            "name": name,
-                            "rule": rule,
-                        }
-                    },
-                }
-            )
-        ]
-    edit = _TaskEdit(task)
-    if _resume_or_pause(edit, purifier):
-        _rename(edit, _t(settings, "sensor_name", device=purifier.name))
-        if edit.src.get("rule") != rule:
-            edit.data.update(fields)
-            edit.set_src({**edit.src, "rule": rule})
-    return [a] if (a := edit.action()) else []
+    return plan_calendar(
+        task,
+        purifier,
+        settings,
+        role=ROLE_SENSOR,
+        name=_t(settings, "sensor_name", device=purifier.name),
+        notes=f"{_t(settings, 'sensor_' + kind)} {_t(settings, 'sensor_due', months=months)}",
+        interval=months,
+        unit="months",
+        rule=f"{kind}:{months}:{settings.lang}",
+        now=now,
+    )
 
 
 # ── reconcile: tasks ─────────────────────────────────────────────────────────
