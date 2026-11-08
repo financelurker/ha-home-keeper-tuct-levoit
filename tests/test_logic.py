@@ -262,7 +262,7 @@ def test_links_keep_the_users_other_parts() -> None:
     assert link.parts == [other, {"asset_id": "a-sp", "part_id": "p1", "quantity": 1}]
 
 
-def test_stock_off_unlinks_and_appliances_off_releases() -> None:
+def test_stock_and_appliances_off_delete_what_we_made() -> None:
     part = {"id": "p1", "name": "Vital 100S-RF", "type": "consumable", "notes": "Used by: Office"}
     task = _task("filter", armed=True)
     task["source"]["parts"] = [{"asset_id": "a-sp", "part_id": "p1", "quantity": 1}]
@@ -274,8 +274,12 @@ def test_stock_off_unlinks_and_appliances_off_releases() -> None:
     }
     off = logic.Settings(config_entry_id="e1", stock_enabled=False, appliances_enabled=False)
     acts = logic.plan_assets([_spares(part), mine], [task], [_p()], {"d1"}, off)
-    assert logic.LinkParts("t-filter", []) in acts
-    assert logic.ReleaseAsset("a-pur") in acts
+    # Unlinked first, then deleted: options switched off clean up after themselves.
+    assert acts == [
+        logic.LinkParts("t-filter", []),
+        logic.DeleteAsset("a-pur"),
+        logic.DeleteAsset("a-sp"),
+    ]
 
 
 def test_existing_appliance_on_the_device_page_is_respected_and_gone_devices_cleaned() -> None:

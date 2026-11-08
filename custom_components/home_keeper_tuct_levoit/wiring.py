@@ -50,7 +50,6 @@ from .const import (
     HK_SERVICE_REGISTER_COMPANION,
     HK_SERVICE_SET_TASK_CONSUMABLE,
     HK_SERVICE_TRIGGER_TASK,
-    HK_SERVICE_UPDATE_ASSET,
     HK_SERVICE_UPDATE_MANAGED_ASSET,
     HK_SERVICE_UPDATE_TASK,
     MANAGED_ICON,
@@ -474,10 +473,6 @@ class LevoitGlue:
             case logic.UpdateManagedAsset(asset_id=asset_id, parts=parts):
                 await self._call(
                     HK_SERVICE_UPDATE_MANAGED_ASSET, {"asset_id": asset_id, "parts": parts}
-                )
-            case logic.ReleaseAsset(asset_id=asset_id):
-                await self._call(
-                    HK_SERVICE_UPDATE_ASSET, {"asset_id": asset_id, "managed_by": None}
                 )
             case logic.DeleteAsset(asset_id=asset_id):
                 await self._call(HK_SERVICE_DELETE_ASSET, {"asset_id": asset_id, "force": True})

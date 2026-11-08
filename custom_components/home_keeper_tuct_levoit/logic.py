@@ -143,13 +143,6 @@ class UpdateManagedAsset:
 
 
 @dataclass(frozen=True, slots=True)
-class ReleaseAsset:
-    """``update_asset`` with ``managed_by: None``: hand an appliance over to the user."""
-
-    asset_id: str
-
-
-@dataclass(frozen=True, slots=True)
 class DeleteAsset:
     """``delete_asset`` with force."""
 
@@ -173,7 +166,6 @@ type Action = (
     | PressReset
     | EnsureAsset
     | UpdateManagedAsset
-    | ReleaseAsset
     | DeleteAsset
     | LinkParts
 )
@@ -540,7 +532,11 @@ def plan_assets(
     known_device_ids: set[str],
     settings: Settings,
 ) -> list[Action]:
-    """Converge the spare-filter appliance, the purifier appliances and the links."""
+    """Converge the spare-filter appliance, the purifier appliances and the links.
+
+    Appliances an option switches off are deleted, not handed over: what the glue made
+    and the user does not want is cleaned up.
+    """
     actions: list[Action] = []
     mine = index(our_assets(assets))
 
@@ -597,8 +593,8 @@ def plan_assets(
     for p in purifiers:
         ours = mine.get((p.device_id, ROLE_PURIFIER))
         if not settings.appliances_enabled:
-            if ours is not None and ours.get("managed_by"):
-                actions.append(ReleaseAsset(ours["id"]))
+            if ours is not None:
+                actions.append(DeleteAsset(ours["id"]))
             continue
         if ours is not None or p.device_id in taken:
             continue
@@ -616,9 +612,13 @@ def plan_assets(
                 }
             )
         )
+    # 4. What we made and the options no longer want goes, after the links above are gone.
+    if spares is not None and not settings.stock_enabled:
+        actions.append(DeleteAsset(spares["id"]))
     for (device_id, role), asset in mine.items():
         if (
             role == ROLE_PURIFIER
+            and settings.appliances_enabled
             and device_id not in by_device
             and device_id not in known_device_ids
         ):

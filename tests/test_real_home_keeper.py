@@ -368,22 +368,41 @@ async def test_without_reset_button_or_reset_on_done_nothing_is_pressed(
     assert (await our_task(hass, plain, "filter"))["next_due"]
 
 
-async def test_options_off_and_removal(hass: HomeAssistant, presses) -> None:
+async def test_options_off_clean_up_and_on_again_rebuild(hass: HomeAssistant, presses) -> None:
     unit = await add_purifier(hass, "office", "Office", filter_low="on")
     await setup_real_hk(hass)
     entry = await setup_glue(hass)
     await set_stock(hass, await our_asset(hass, "spares"), 2)
 
+    # What the glue made and the options no longer want is deleted, not left behind.
     hass.config_entries.async_update_entry(
         entry,
         options={"prefilter_enabled": False, "appliances_enabled": False, "stock_enabled": False},
     )
     await settle(hass)
     assert await our_task(hass, unit, "prefilter") is None
-    appliance = await our_asset(hass, "purifier", unit.device.id)
-    assert appliance is not None
-    assert appliance["managed_by"] is None  # handed over to the user
-    assert not (await our_task(hass, unit, "filter"))["source"].get("parts")
+    assert await our_asset(hass, "purifier", unit.device.id) is None
+    assert await our_asset(hass, "spares") is None
+    task = await our_task(hass, unit, "filter")
+    assert not task["source"].get("parts")
+    assert task["next_due"]  # the filter task itself stays
+
+    # Switched on again: built anew, the filter task linked to the new stock.
+    hass.config_entries.async_update_entry(entry, options={})
+    await settle(hass)
+    assert await our_task(hass, unit, "prefilter") is not None
+    assert await our_asset(hass, "purifier", unit.device.id) is not None
+    spares = await our_asset(hass, "spares")
+    assert spares["parts"][0].get("stock") is None
+    task = await our_task(hass, unit, "filter")
+    assert task["source"]["parts"][0]["asset_id"] == spares["id"]
+
+
+async def test_removal_keeps_counted_stock_for_the_user(hass: HomeAssistant, presses) -> None:
+    unit = await add_purifier(hass, "office", "Office", filter_low="on")
+    await setup_real_hk(hass)
+    entry = await setup_glue(hass)
+    await set_stock(hass, await our_asset(hass, "spares"), 2)
 
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
