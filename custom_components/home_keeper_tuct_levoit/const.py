@@ -32,6 +32,7 @@ MARK_PENDING = "pending_reset"
 # ── Home Keeper side (EXTERNAL CONTRACT — docs/INTEGRATING.md, v0.36.0) ───────
 HK_DOMAIN = "home_keeper"
 HK_EVENT_TASK_COMPLETED = "home_keeper_task_completed"
+HK_EVENT_TASK_DELETED = "home_keeper_task_deleted"
 HK_EVENT_REGISTER_COMPANIONS = "home_keeper_register_companions"
 HK_SERVICE_REGISTER_COMPANION = "register_companion"
 HK_SERVICE_LIST_TASKS = "list_tasks"

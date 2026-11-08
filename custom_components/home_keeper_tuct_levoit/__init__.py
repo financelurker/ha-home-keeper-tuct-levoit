@@ -52,7 +52,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LevoitGlueConfigEntry) 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: LevoitGlueConfigEntry) -> None:
-    """On removal: delete our tasks, hand appliances worth keeping to the user."""
+    """On removal: delete our tasks, hand appliances with counted stock to the user."""
     services = hass.services
     if services.has_service(HK_DOMAIN, HK_SERVICE_LIST_TASKS):
         try:
@@ -76,10 +76,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: LevoitGlueConfigEntry) 
             HK_DOMAIN, HK_SERVICE_LIST_ASSETS, {}, blocking=True, return_response=True
         )
         for asset in logic.our_assets(list((resp or {}).get("assets", []))):
-            counted = any(p.get("stock") is not None for p in asset.get("parts") or [])
-            if counted or asset.get("kind") == "existing":
-                # Spares still in the drawer, or details on the user's own device page:
-                # keep it, drop only our ownership (INTEGRATING.md §8, "Uninstall").
+            # INTEGRATING.md §8, "Uninstall": a delete would take the user's stock counts
+            # with it, so an appliance with a counted part is handed over (locks off,
+            # the user keeps it); one without is deleted.
+            if any(p.get("stock") is not None for p in asset.get("parts") or []):
                 await services.async_call(
                     HK_DOMAIN,
                     HK_SERVICE_UPDATE_ASSET,

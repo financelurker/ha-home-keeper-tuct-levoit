@@ -410,6 +410,31 @@ async def test_removal_keeps_counted_stock_for_the_user(hass: HomeAssistant, pre
     spares = await our_asset(hass, "spares")
     assert spares is not None  # counted stock stays with the user
     assert spares["managed_by"] is None
+    assert await our_asset(hass, "purifier", unit.device.id) is None  # nothing counted
+
+
+async def test_removal_without_stock_leaves_nothing(hass: HomeAssistant, presses) -> None:
+    await add_purifier(hass, "office", "Office", filter_low="on")
+    await setup_real_hk(hass)
+    entry = await setup_glue(hass)
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert [t for t in await tasks(hass) if ours(t)] == []
+    assert [a for a in await assets(hass) if ours(a)] == []
+
+
+async def test_deleted_prefilter_task_comes_back(hass: HomeAssistant, presses) -> None:
+    unit = await add_purifier(hass, "office", "Office")
+    await setup_real_hk(hass)
+    await setup_glue(hass)
+    pre = await our_task(hass, unit, "prefilter")
+
+    await hk(hass, "delete_task", {"task_id": pre["id"], "force": True})
+    await settle(hass)
+    again = await our_task(hass, unit, "prefilter")
+    assert again is not None
+    assert again["id"] != pre["id"]
 
 
 async def test_removed_device_takes_its_tasks(hass: HomeAssistant, presses) -> None:
