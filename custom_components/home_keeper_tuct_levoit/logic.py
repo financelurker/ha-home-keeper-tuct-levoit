@@ -69,9 +69,19 @@ class Purifier:
     runtime_entity: str | None = None
     # Device disabled: its tasks are switched off, not deleted.
     paused: bool = False
+    # Where the task names say the care is: the purifier's area, so a dashboard that
+    # drops the area name in its area view shows "Clean pre-filter: Mark done", while
+    # Home Keeper's to-do list reads "Office Clean pre-filter". The device name when the
+    # purifier has no area, or shares it with another purifier.
+    where: str | None = None
     # The filter it takes: the per-device or per-model name from the options, else the
     # catalog's. It is the part's name in the shared stock and on the device page.
     filter: str | None = None
+
+    @property
+    def task_prefix(self) -> str:
+        """Return what the task names start with."""
+        return self.where or self.name
 
     @property
     def filter_part(self) -> str:
@@ -408,7 +418,7 @@ def _chips_of(task: dict[str, Any]) -> list[dict[str, str]]:
 
 def filter_task_payload(purifier: Purifier, settings: Settings) -> dict[str, Any]:
     """Return the ``add_task`` payload of a purifier's filter task."""
-    name = _t(settings, "filter_name", device=purifier.name)
+    name = _t(settings, "filter_name", where=purifier.task_prefix)
     extra = (
         {"completion_prompt": _t(settings, "filter_prompt")}
         if resets_on_done(purifier, settings)
@@ -452,7 +462,7 @@ def plan_filter(
     edit = _TaskEdit(task)
     if not _resume_or_pause(edit, purifier):
         return [a] if (a := edit.action()) else []
-    _rename(edit, _t(settings, "filter_name", device=purifier.name))
+    _rename(edit, _t(settings, "filter_name", where=purifier.task_prefix))
     chips = filter_chips(purifier, settings)
     if purifier.filter_life is not None and _chips_of(task) != chips:
         edit.data["task_chips"] = chips
@@ -643,7 +653,7 @@ def plan_prefilter(
         return [DeleteTask(task["id"])] if task is not None else []
     weeks = settings.prefilter_weeks
     how = _t(settings, "how_wash" if purifier.model.prefilter == WASH else "how_vacuum")
-    name = _t(settings, "prefilter_name", device=purifier.name)
+    name = _t(settings, "prefilter_name", where=purifier.task_prefix)
     if not purifier.runtime_entity:
         return plan_calendar(
             task,
@@ -726,7 +736,7 @@ def plan_sensor(
         purifier,
         settings,
         role=ROLE_SENSOR,
-        name=_t(settings, "sensor_name", device=purifier.name),
+        name=_t(settings, "sensor_name", where=purifier.task_prefix),
         notes=f"{_t(settings, 'sensor_' + kind)} {_t(settings, 'sensor_due', months=months)}",
         interval=months,
         unit="months",

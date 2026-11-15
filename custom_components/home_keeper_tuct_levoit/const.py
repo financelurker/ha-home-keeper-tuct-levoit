@@ -121,7 +121,7 @@ PART_TYPE_WEAR = "wear"
 # ── Text per language (task data, so it follows the Home Assistant language) ─
 TEXT: dict[str, dict[str, str]] = {
     "en": {
-        "filter_name": "Replace filter ({device})",
+        "filter_name": "{where} Replace filter",
         "filter_notes": (
             "The purifier reports **Filter Low**. Fit a new **{part}** and tick this "
             "off: the filter statistics on the purifier are reset for you."
@@ -139,7 +139,7 @@ TEXT: dict[str, dict[str, str]] = {
         "filter_ahead_note": (
             "Created ahead of the first Filter Low: armed when the purifier reports it."
         ),
-        "prefilter_name": "Clean pre-filter ({device})",
+        "prefilter_name": "{where} Clean pre-filter",
         "how_wash": "Take out the washable pre-filter, vacuum it, rinse it under running "
         "water and let it dry completely.",
         "how_vacuum": "Vacuum the pre-filter or brush it off. Do not wash it.",
@@ -149,7 +149,7 @@ TEXT: dict[str, dict[str, str]] = {
         "ESPHome config to count fan hours instead.",
         "due_chip": "Due {date}",
         "calendar_skip_note": "Not due yet: waiting until its interval has passed.",
-        "sensor_name": "Clean dust sensor ({device})",
+        "sensor_name": "{where} Clean dust sensor",
         "sensor_infrared": (
             "Unplug the purifier and open the dust sensor cover. Clean the air inlet, the "
             "air outlet and the sensor lens with a moistened cotton swab, then repeat "
@@ -196,7 +196,7 @@ TEXT: dict[str, dict[str, str]] = {
         "entity_filter_life": "Filter life left",
     },
     "de": {
-        "filter_name": "Filter tauschen ({device})",
+        "filter_name": "{where} Filter tauschen",
         "filter_notes": (
             "Der Luftreiniger meldet **Filter Low**. Neuen **{part}** einsetzen und "
             "abhaken: Die Filterstatistik am Gerät wird dabei zurückgesetzt."
@@ -215,7 +215,7 @@ TEXT: dict[str, dict[str, str]] = {
         "filter_ahead_note": (
             "Vor dem ersten Filter Low angelegt: wird scharf, sobald der Luftreiniger es meldet."
         ),
-        "prefilter_name": "Vorfilter reinigen ({device})",
+        "prefilter_name": "{where} Vorfilter reinigen",
         "how_wash": "Waschbaren Vorfilter herausnehmen, absaugen, unter fließendem Wasser "
         "ausspülen und vollständig trocknen lassen.",
         "how_vacuum": "Vorfilter absaugen oder abbürsten. Nicht waschen.",
@@ -225,7 +225,7 @@ TEXT: dict[str, dict[str, str]] = {
         "ESPHome-Config wird stattdessen nach Lüfterstunden gezählt.",
         "due_chip": "Fällig am {date}",
         "calendar_skip_note": "Noch nicht fällig: wartet, bis das Intervall vorbei ist.",
-        "sensor_name": "Staubsensor reinigen ({device})",
+        "sensor_name": "{where} Staubsensor reinigen",
         "sensor_infrared": (
             "Luftreiniger ausstecken und die Abdeckung des Staubsensors öffnen. "
             "Lufteinlass, Luftauslass und Sensorlinse mit einem befeuchteten "
