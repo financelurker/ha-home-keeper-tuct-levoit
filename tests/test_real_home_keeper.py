@@ -57,7 +57,7 @@ async def test_setup_builds_prefilter_spares_and_appliance(hass: HomeAssistant, 
 
     pre = await our_task(hass, unit, "prefilter")
     assert pre is not None
-    assert pre["name"] == "Vorfilter reinigen (Office)"
+    assert pre["name"] == "Office Vorfilter reinigen"
     assert pre["recurrence_type"] == "sensor"
     assert pre["sensor"]["entity_id"] == unit.runtime
     assert pre["sensor"]["mode"] == "usage"
@@ -102,7 +102,7 @@ async def test_filter_cycle_draws_shared_stock_and_resets_purifier(
     task = await our_task(hass, unit, "filter")
     assert task is not None
     assert task["next_due"]
-    assert task["name"] == "Filter tauschen (Office)"
+    assert task["name"] == "Office Filter tauschen"
     assert task["managed_by"]["completion_prompt"]
     spares = await our_asset(hass, "spares")
     device = await our_asset(hass, "purifier", unit.device.id)
@@ -401,7 +401,7 @@ async def test_device_rename_and_user_rename(hass: HomeAssistant, presses) -> No
 
     dr.async_get(hass).async_update_device(unit.device.id, name_by_user="Study")
     await settle(hass)
-    assert (await our_task(hass, unit, "filter"))["name"] == "Filter tauschen (Study)"
+    assert (await our_task(hass, unit, "filter"))["name"] == "Study Filter tauschen"
     assert (await our_task(hass, unit, "prefilter"))["name"] == "Wash the office pre-filter"
     assert "Study" in (await our_asset(hass, "spares"))["parts"][0]["notes"]
 
@@ -586,7 +586,7 @@ async def test_dust_sensor_task_per_model(hass: HomeAssistant, presses) -> None:
     entry = await setup_glue(hass)
 
     task = await our_task(hass, vital, "sensor")
-    assert task["name"] == "Staubsensor reinigen (Office)"
+    assert task["name"] == "Office Staubsensor reinigen"
     assert (task["recurrence_type"], task["next_due"]) == ("triggered", None)
     assert task["completions"] == []
     assert "Wattestäbchen" in task["notes"]
@@ -628,7 +628,7 @@ async def test_only_due_care_is_on_the_to_do_list(hass: HomeAssistant, presses, 
     freezer.tick(timedelta(weeks=4, hours=1))
     async_fire_time_changed(hass)
     await settle(hass)
-    assert await _todo(hass) == ["Vorfilter reinigen (Office)"]
+    assert await _todo(hass) == ["Office Vorfilter reinigen"]
 
     # Ticked off: it waits another 4 weeks; 2 months on, the dust sensor is due.
     await hk(hass, "complete_task", {"task_id": (await our_task(hass, unit, "prefilter"))["id"]})
@@ -637,7 +637,7 @@ async def test_only_due_care_is_on_the_to_do_list(hass: HomeAssistant, presses, 
     freezer.tick(timedelta(weeks=5))
     async_fire_time_changed(hass)
     await settle(hass)
-    assert await _todo(hass) == ["Staubsensor reinigen (Office)", "Vorfilter reinigen (Office)"]
+    assert await _todo(hass) == ["Office Staubsensor reinigen", "Office Vorfilter reinigen"]
 
 
 async def test_calendar_task_of_the_previous_version_is_converted(
@@ -650,7 +650,7 @@ async def test_calendar_task_of_the_previous_version_is_converted(
         hass,
         "add_task",
         {
-            "name": "Staubsensor reinigen (Office)",
+            "name": "Office Staubsensor reinigen",
             "recurrence_type": "floating",
             "interval": 2,
             "unit": "months",
@@ -660,7 +660,7 @@ async def test_calendar_task_of_the_previous_version_is_converted(
                 SOURCE_NS: {
                     "device_id": unit.device.id,
                     "role": "sensor",
-                    "name": "Staubsensor reinigen (Office)",
+                    "name": "Office Staubsensor reinigen",
                     "rule": "infrared:2:de",
                 }
             },
@@ -668,7 +668,7 @@ async def test_calendar_task_of_the_previous_version_is_converted(
         response=True,
     )
     old = await our_task(hass, unit, "sensor")
-    assert await _todo(hass) == ["Staubsensor reinigen (Office)"]
+    assert await _todo(hass) == ["Office Staubsensor reinigen"]
 
     await setup_glue(hass)
     task = await our_task(hass, unit, "sensor")
@@ -708,3 +708,58 @@ async def test_filter_task_ahead_draws_nothing_and_shows_filter_life(
     task = await our_task(hass, unit, "filter")
     assert task["next_due"]  # Filter Low arms the same task
     assert [c["label"] for c in task["task_chips"]] == ["Filter noch 0 %"]
+
+
+async def test_task_names_start_with_the_area(hass: HomeAssistant, presses) -> None:
+    from homeassistant.helpers import area_registry as ar
+
+    areas = ar.async_get(hass)
+    office_area = areas.async_create("Office")
+    bedroom_area = areas.async_create("Bedroom")
+    office = await add_purifier(hass, "office", "Office AirPurifier")
+    left = await add_purifier(hass, "bed_l", "Bedroom Left")
+    right = await add_purifier(hass, "bed_r", "Bedroom Right")
+    plain = await add_purifier(hass, "hall", "Hall AirPurifier")
+    devices = dr.async_get(hass)
+    devices.async_update_device(office.device.id, area_id=office_area.id)
+    devices.async_update_device(left.device.id, area_id=bedroom_area.id)
+    devices.async_update_device(right.device.id, area_id=bedroom_area.id)
+    await setup_real_hk(hass)
+    await setup_glue(hass)
+
+    # Its own area: the area name first, so a dashboard dropping the area name in the
+    # area view shows "Vorfilter reinigen: …".
+    assert (await our_task(hass, office, "prefilter"))["name"] == "Office Vorfilter reinigen"
+    # Two purifiers in one area, or none: the device name keeps the names apart.
+    assert (await our_task(hass, left, "prefilter"))["name"] == "Bedroom Left Vorfilter reinigen"
+    assert (await our_task(hass, right, "filter"))["name"] == "Bedroom Right Filter tauschen"
+    assert (await our_task(hass, plain, "sensor"))[
+        "name"
+    ] == "Hall AirPurifier Staubsensor reinigen"
+
+    # Home Keeper names its Mark done entity after the task.
+    button = next(
+        e
+        for e in er.async_entries_for_device(er.async_get(hass), office.device.id)
+        if e.platform == "home_keeper"
+        and e.domain == "button"
+        and "Vorfilter" in (hass.states.get(e.entity_id).attributes.get("friendly_name") or "")
+    )
+    assert (
+        hass.states.get(button.entity_id)
+        .attributes["friendly_name"]
+        .startswith("Office AirPurifier Office Vorfilter reinigen")
+    )
+
+    # Moved to another area: the names follow, unless the user renamed the task.
+    pre = await our_task(hass, office, "prefilter")
+    await hk(hass, "update_task", {"task_id": pre["id"], "name": "Office pre-filter"})
+    study = areas.async_create("Study")
+    devices.async_update_device(office.device.id, area_id=study.id)
+    await settle(hass)
+    assert (await our_task(hass, office, "filter"))["name"] == "Study Filter tauschen"
+    assert (await our_task(hass, office, "prefilter"))["name"] == "Office pre-filter"
+    # The area renamed: the names follow too.
+    areas.async_update(study.id, name="Studio")
+    await settle(hass)
+    assert (await our_task(hass, office, "filter"))["name"] == "Studio Filter tauschen"

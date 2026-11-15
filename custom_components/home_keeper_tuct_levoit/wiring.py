@@ -21,7 +21,11 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, STATE_OFF, STATE_ON
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
@@ -184,6 +188,7 @@ class LevoitGlue:
         on_unload(bus.async_listen(HK_EVENT_REGISTER_COMPANIONS, self._on_register_request))
         on_unload(bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_registry_updated))
         on_unload(bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, self._on_registry_updated))
+        on_unload(bus.async_listen(ar.EVENT_AREA_REGISTRY_UPDATED, self._on_registry_updated))
         on_unload(self._teardown)
         # The calendar tasks are armed by the glue: look once an hour whether one is due.
         on_unload(async_track_time_interval(self.hass, self._on_hourly, _CALENDAR_CHECK_INTERVAL))
@@ -276,6 +281,24 @@ class LevoitGlue:
             options.get(OPT_FILTER_NAMES) or {}
         ).get(model_key)
 
+    def _with_where(self, purifiers: list[logic.Purifier]) -> list[logic.Purifier]:
+        """Give each purifier the area its task names start with, if it has its own."""
+        dev_reg = dr.async_get(self.hass)
+        area_reg = ar.async_get(self.hass)
+        area_of: dict[str, str] = {}
+        for p in purifiers:
+            device = dev_reg.async_get(p.device_id)
+            area = area_reg.async_get_area(device.area_id) if device and device.area_id else None
+            if area is not None and area.name.strip():
+                area_of[p.device_id] = area.name.strip()
+        shared = {name for name in area_of.values() if list(area_of.values()).count(name) > 1}
+        return [
+            replace(p, where=area_of[p.device_id])
+            if p.device_id in area_of and area_of[p.device_id] not in shared
+            else p
+            for p in purifiers
+        ]
+
     def scan(self) -> list[logic.Purifier]:
         """Read every purifier and its entities out of the registries."""
         purifiers: list[logic.Purifier] = []
@@ -302,6 +325,7 @@ class LevoitGlue:
                     filter=self.filter_for(device.id, key, self.entry.options),
                 )
             )
+        purifiers = self._with_where(purifiers)
         self._purifiers = {p.device_id: p for p in purifiers}
         if _LOGGER.isEnabledFor(logging.DEBUG):
             if not purifiers:

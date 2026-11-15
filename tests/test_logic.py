@@ -27,7 +27,7 @@ def _p(**kw) -> logic.Purifier:
 
 
 def _task(role: str, *, armed: bool, src: dict | None = None, **kw) -> dict:
-    name = "Replace filter (Office)" if role == "filter" else "Clean pre-filter (Office)"
+    name = "Office Replace filter" if role == "filter" else "Office Clean pre-filter"
     return {
         "id": f"t-{role}",
         "name": name,
@@ -72,14 +72,14 @@ def test_filter_task_is_made_at_once() -> None:
     assert create.dormant is False
     payload = create.payload
     assert payload["recurrence_type"] == "triggered"
-    assert payload["name"] == "Replace filter (Office)"
+    assert payload["name"] == "Office Replace filter"
     assert "Vital 100S-RF" in payload["notes"]
     assert payload["managed_by"]["locked_fields"] == ["device_id", "recurrence_type"]
     assert payload["managed_by"]["completion_prompt"]
     assert payload["source"][SOURCE_NS] == {
         "device_id": "d1",
         "role": "filter",
-        "name": "Replace filter (Office)",
+        "name": "Office Replace filter",
     }
 
 
@@ -130,8 +130,8 @@ def test_pause_and_resume_leave_user_disabled_tasks_alone() -> None:
 def test_name_follows_the_device_unless_the_user_renamed_it() -> None:
     renamed = _p(name="Study", filter_low=False)
     (update,) = logic.plan_filter(_task("filter", armed=False), renamed, S)
-    assert update.data["name"] == "Replace filter (Study)"
-    assert _src(update)["name"] == "Replace filter (Study)"
+    assert update.data["name"] == "Study Replace filter"
+    assert _src(update)["name"] == "Study Replace filter"
 
     mine = _task("filter", armed=False)
     mine["name"] = "Change the HEPA upstairs"
